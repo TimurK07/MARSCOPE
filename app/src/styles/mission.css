@@ -345,16 +345,141 @@
 }
 
 /* route priority */
-.m-mode {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px var(--pad);
+/* route priority: three cards, one selected. Each is a full-width row of two lines. */
+.m-modes {
+  padding: 6px var(--pad) 7px;
   border-top: 1px solid var(--line);
 }
-.m-mode .seg button {
-  min-height: 28px;
+.mode-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 2px 8px 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+.mode-card:hover {
+  border-color: var(--line-strong);
+}
+.mode-card:focus-visible {
+  outline: 2px solid var(--accent-hi);
+  outline-offset: 1px;
+}
+.mode-card.is-on {
+  background: var(--accent-wash);
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.mode-card i {
+  font-style: normal;
+  color: var(--text-3);
+}
+/* line 1: name, what it minimises, and its own verdict at the right */
+.mc-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 7px;
+}
+.mc-name {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.mc-obj {
+  color: var(--text-3);
+}
+.mc-verdict {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-3);
+}
+.mc-verdict.v-go {
+  color: var(--go);
+}
+.mc-verdict.v-nogo {
+  color: var(--nogo);
+}
+.mc-verdict.v-unverified {
+  color: var(--warn);
+}
+.mc-verdict.v-noroute {
+  color: var(--noroute);
+}
+/* line 2: the model walking time, then the differences from Fastest */
+.mc-figs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  font-family: var(--mono);
+}
+.mc-figs i {
+  font-family: var(--font);
+}
+.mc-figs b {
+  margin-left: -3px;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+}
+.mc-detail i {
+  margin-right: 4px;
+}
+.mode-note {
+  margin-top: 4px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.3;
+}
+.is-mobile .mode-card {
+  min-height: 44px;
+}
+
+/* short desktop windows: a smaller status block and tighter figures, so the plan below keeps its room */
+@media (max-height: 700px) {
+  .ws:not(.is-mobile) .m-status {
+    min-height: 0;
+    padding: 7px var(--pad) 8px;
+  }
+  .ws:not(.is-mobile) .m-status strong {
+    margin-top: 0;
+    font-size: 26px;
+  }
+  .ws:not(.is-mobile) .m-status > .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .ws:not(.is-mobile) .m-status p {
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+  .ws:not(.is-mobile) .m-metrics div {
+    padding: 4px var(--pad) 5px;
+  }
+  .ws:not(.is-mobile) .m-metrics dd {
+    font-size: 14px;
+  }
 }
 
 .sr-only {
@@ -374,25 +499,83 @@
 }
 .cmp th,
 .cmp td {
-  padding: 5px 4px;
+  padding: 5px 3px;
   border-bottom: 1px solid var(--line);
   text-align: right;
   font-weight: 400;
 }
+.cmp .cmp-c0 {
+  width: 28%;
+}
+.cmp th,
+.cmp td {
+  vertical-align: top;
+}
 .cmp tbody th {
-  width: 34%;
   padding-left: 0;
   color: var(--text-2);
   text-align: left;
-}
-.cmp tbody th[title] {
-  text-decoration: underline dotted var(--text-3);
-  text-underline-offset: 3px;
-  cursor: help;
+  line-height: 1.3;
 }
 .cmp td {
   font-family: var(--mono);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+}
+.cmp td small {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.cmp-status td {
+  font-weight: 600;
+}
+.cmp-status td small {
+  font-family: var(--font);
+  font-weight: 400;
+  line-height: 1.25;
+}
+.cmp-key {
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.cmp-note {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.cmp-fold {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.cmp-fold summary {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.cmp-fold summary:hover {
+  color: var(--text);
+}
+.cmp-fold[open] summary {
+  color: var(--text);
+}
+.cmp-about div {
+  padding: 4px 0;
+}
+.cmp-about dt {
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.cmp-about dd {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
 }
 .cmp thead button {
   width: 100%;
@@ -417,11 +600,6 @@
   background: var(--accent-wash);
   color: var(--text);
 }
-.cmp td.is-min {
-  text-decoration: underline;
-  text-decoration-color: var(--text-3);
-  text-underline-offset: 3px;
-}
 .cmp td.v-go {
   color: var(--go);
 }
@@ -431,25 +609,15 @@
 .cmp td.v-noroute {
   color: var(--noroute);
 }
-.cmp-note {
-  margin-top: 10px;
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-  line-height: 1.45;
-}
-.cmp-note b {
-  color: var(--text);
-  font-weight: 600;
-}
 
 /* touch: larger targets for the priority controls */
-.is-mobile .m-mode .seg button,
-.is-mobile .cmp thead button {
+.is-mobile .cmp thead button,
+.is-mobile .cmp-fold summary {
   min-height: 40px;
 }
 @media (pointer: coarse) {
-  .m-mode .seg button,
-  .cmp thead button {
+  .cmp thead button,
+  .cmp-fold summary {
     min-height: 40px;
   }
 }

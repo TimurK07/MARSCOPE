@@ -68,7 +68,19 @@
   white-space: nowrap;
   overflow: hidden;
 }
+.sheet-status {
+  flex: none;
+}
+/* which route priority the summary is for */
+.sheet-mode {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-style: normal;
+}
 .sheet-verdict {
+  display: block;
   font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -148,7 +160,15 @@
   display: none;
 }
 .sheet-body .m-head {
+  display: flex;
+  flex-direction: column;
   border-bottom-color: var(--line);
+}
+/* the priority cards come first in the open sheet; the summary above already has the headline figures */
+.sheet-body .m-modes {
+  order: -1;
+  border-top: 0;
+  padding-top: 4px;
 }
 .sheet-fail {
   padding: 10px var(--pad);

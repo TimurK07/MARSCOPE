@@ -73,7 +73,10 @@ describe('what the interface says instead', () => {
 
   it('labels energy as the model\'s and says where gravity enters', () => {
     expect(panel).toContain('Walking energy · model')
-    expect(panel).toContain("label: 'Walking energy, model'")
+    // The comparison table's rows are built in the comparison module; the long note stays in the panel.
+    const comparison = read(join(APP, 'src/lib/comparison.ts'))
+    expect(comparison).toContain("'Model walking energy'")
+    expect(comparison).toContain('Mars gravity enters only its climb and descent terms')
     expect(panel).toContain('only its climb and')
     const energy = ROUTE_MODES.find((m) => m.id === 'energy')!.summary
     expect(energy).toContain('climb and descent terms only')

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { adviceFor } from '../lib/advice'
+import { compareModes, comparisonTable, modeCards, OBJECTIVE, type ModeState, type TableRow } from '../lib/comparison'
 import { buildChecks, type Verdict } from '../lib/mission'
 import { CAUTION_WEIGHT, ROUTE_MODES, type RouteMode } from '../lib/objectives'
 import type { ModeSummary } from '../lib/planner'
 import { EVA, MAX_SLOPE_DEG, PLANNING_PACE, RADIATION, RETURN_DISTANCE_AT_PACE_M, RETURN_DISTANCE_RANGE, RETURN_LIMITS } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
-import { Datum, Icon, Section, Segmented } from './ui'
+import { Datum, Icon, Section } from './ui'
 import { fmtDose, fmtSlope } from '../lib/format'
 
 interface Props {
@@ -21,115 +22,150 @@ interface Props {
 
 const VERDICT_SHORT: Record<Verdict, string> = { standby: '—', go: 'GO', nogo: 'NO-GO', unverified: 'UNVERIFIED', noroute: 'NO ROUTE' }
 
+/** What a mode shows in place of a verdict while it has none. */
+const verdictText = (verdict: Verdict, state: ModeState) => (state === 'pending' ? '…' : VERDICT_SHORT[verdict])
+
+/**
+ * The route priority, chosen on three cards. Each card carries its own mode's
+ * verdict and figures, so the three can be told apart before one is picked.
+ */
+export function ModeCards({ plan: s }: { plan: PlanState }) {
+  const cards = modeCards(s.comparison, s.mode, s.pending)
+  return (
+    <div className="m-modes">
+      <div className="mode-cards" role="group" aria-label="Route priority">
+        {cards.map((c) => (
+          <button
+            key={c.mode}
+            type="button"
+            className={`mode-card ${c.selected ? 'is-on' : ''}`}
+            aria-pressed={c.selected}
+            aria-label={`${c.description} Mission status: ${c.state === 'pending' ? 'calculating' : c.state === 'idle' ? 'none yet' : VERDICT_SHORT[c.verdict]}.`}
+            onClick={() => s.setMode(c.mode)}
+          >
+            <span className="mc-top">
+              <span className="mc-name">{c.label}</span>
+              <span className="mc-obj">{c.objective}</span>
+              <span className={`mc-verdict v-${c.verdict}`}>{verdictText(c.verdict, c.state)}</span>
+            </span>
+            <span className="mc-figs">
+              <i>{c.timeLabel}</i>
+              <b>{c.time}</b>
+              {c.timeDelta && <span>{c.timeDelta}</span>}
+              <span className="mc-detail">
+                {/* kcal already says energy */}
+                {c.detail.label && !c.detail.text.endsWith('kcal') && <i>{c.detail.label}</i>}
+                {c.detail.text}
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="mode-note">The Cautious weighting is a heuristic, not a safety rating.</p>
+    </div>
+  )
+}
+
 /** The three routes for the same checkpoints, measured the same way, side by side. */
-function ModeComparison(props: {
-  comparison: Record<RouteMode, ModeSummary | null>
-  selected: RouteMode
-  onSelect: (m: RouteMode) => void
-  pending: boolean
-}) {
-  const cols = ROUTE_MODES.map((m) => ({ ...m, data: props.comparison[m.id] }))
-  const any = cols.some((c) => c.data)
-  const rows: { label: string; hint?: string; value: (d: ModeSummary) => string; num?: (d: ModeSummary) => number }[] = [
-    { label: 'Distance', value: (d) => fmtKm(d.distance), num: (d) => d.distance },
-    {
-      label: 'Walking time, model',
-      hint: 'By the walking-speed model (Marquez 2007, as in SEXTANT). This is what Fastest minimises.',
-      value: (d) => fmtDur(d.walkTime),
-      num: (d) => d.walkTime,
-    },
-    {
-      label: `at ≤ ${PLANNING_PACE.max_kmh} km/h`,
-      hint: `The same route with the speed capped at the planning pace of ${PLANNING_PACE.max_kmh} km/h. A second scenario, not a bound or a confidence interval.`,
-      value: (d) => fmtDur(d.planWalkTime),
-      num: (d) => d.planWalkTime,
-    },
-    {
-      label: 'Walking energy, model',
-      hint: 'Metabolic energy of walking by the adopted model (Santee et al. 2001), at the model speed. Mars gravity enters only its climb and descent terms.',
-      value: (d) => `${Math.round(d.energyKcal)} kcal`,
-      num: (d) => d.energyKcal,
-    },
-    { label: 'Climb', value: (d) => `+${Math.round(d.ascent)} m`, num: (d) => d.ascent },
-    {
-      label: 'Hidden steep ground',
-      hint: 'Steep-pixel shares of the cells crossed, added up. 1.0 equals one 4 m cell that is entirely steeper than 20° at the 1 m scale.',
-      value: (d) => (d.exposure ? d.exposure.load.toFixed(1) : '—'),
-      num: (d) => d.exposure?.load ?? NaN,
-    },
-    {
-      label: 'per km',
-      hint: 'The same, per kilometre of route, so routes of different lengths can be compared.',
-      value: (d) => (d.exposure ? d.exposure.perKm.toFixed(1) : '—'),
-      num: (d) => d.exposure?.perKm ?? NaN,
-    },
-    {
-      label: 'cells affected',
-      hint: 'Share of the cells crossed that contain any steep 1 m pixel.',
-      value: (d) => (d.exposure ? `${(d.exposure.cellShare * 100).toFixed(1)}%` : '—'),
-      num: (d) => d.exposure?.cellShare ?? NaN,
-    },
-  ]
-  const current = ROUTE_MODES.find((m) => m.id === props.selected)!
+function ModeComparison(props: { comparison: Record<RouteMode, ModeSummary | null>; selected: RouteMode; onSelect: (m: RouteMode) => void; pending: boolean }) {
+  const table = comparisonTable(props.comparison, props.pending)
+  const any = ROUTE_MODES.some((m) => props.comparison[m.id])
+  const on = (id: RouteMode) => (id === props.selected ? 'is-on' : '')
+  const head = (
+    <colgroup>
+      <col className="cmp-c0" />
+      <col />
+      <col />
+      <col />
+    </colgroup>
+  )
+  const body = (rows: TableRow[]) =>
+    rows.map((r) => (
+      <tr key={r.id}>
+        <th scope="row">
+          {r.label}
+          {r.hint && <span className="sr-only">. {r.hint}</span>}
+        </th>
+        {ROUTE_MODES.map((m) => (
+          <td key={m.id} className={on(m.id)}>
+            {r.cells[m.id].value}
+            {r.cells[m.id].delta && <small>{r.cells[m.id].delta}</small>}
+          </td>
+        ))}
+      </tr>
+    ))
   return (
     <div className="cmp">
       <table>
+        {head}
         <thead>
           <tr>
             <th scope="col">
               <span className="sr-only">Metric</span>
             </th>
-            {cols.map((c) => (
-              <th key={c.id} scope="col" className={c.id === props.selected ? 'is-on' : ''}>
-                <button type="button" aria-pressed={c.id === props.selected} onClick={() => props.onSelect(c.id)} title={c.short}>
-                  {c.id === 'energy' ? 'Energy' : c.label}
+            {ROUTE_MODES.map((m) => (
+              <th key={m.id} scope="col" className={on(m.id)}>
+                <button type="button" aria-pressed={m.id === props.selected} onClick={() => props.onSelect(m.id)}>
+                  {m.id === 'energy' ? 'Energy' : m.label}
                 </button>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <th scope="row">Status</th>
-            {cols.map((c) => (
-              <td key={c.id} className={`${c.id === props.selected ? 'is-on' : ''} v-${c.data?.verdict ?? 'standby'}`}>
-                {c.data ? VERDICT_SHORT[c.data.verdict] : props.pending ? '…' : '—'}
+          <tr className="cmp-status">
+            <th scope="row">Mission status</th>
+            {ROUTE_MODES.map((m) => (
+              <td key={m.id} className={`${on(m.id)} v-${table.verdicts[m.id]}`}>
+                {verdictText(table.verdicts[m.id], table.states[m.id])}
+                {table.reasons[m.id] && <small>{table.reasons[m.id]}</small>}
               </td>
             ))}
           </tr>
-          {rows.map((r) => {
-            // The lowest value in a row is marked; ties are all marked.
-            const nums = cols.map((c) => (c.data?.feasible && r.num ? r.num(c.data) : NaN))
-            const min = Math.min(...nums.filter((n) => !Number.isNaN(n)))
-            return (
-              <tr key={r.label}>
-                <th scope="row" title={r.hint}>
-                  {r.label}
-                </th>
-                {cols.map((c, i) => (
-                  <td key={c.id} className={`${c.id === props.selected ? 'is-on' : ''} ${nums[i] === min ? 'is-min' : ''}`}>
-                    {c.data?.feasible ? r.value(c.data) : '—'}
-                  </td>
-                ))}
-              </tr>
-            )
-          })}
+          {body(table.primary)}
         </tbody>
       </table>
       {!any && <p className="muted">{props.pending ? 'Calculating the three routes…' : 'Plan a route to compare the three priorities.'}</p>}
-      <p className="cmp-note">
-        <b>{current.label}.</b> {current.summary}
-      </p>
-      <p className="footnote">
-        All three routes obey the same hard limits: {MAX_SLOPE_DEG}° maximum slope for every cell and every step walked, no
-        clipping of no-go cells, and the same EVA and return checks. They are measured the same way; the lowest value in each row is underlined. Walking
-        energy is an approximation adapted from treadmill research on Earth (Santee et al. 2001), at the model's walking
-        speed; Mars gravity enters only its climb and descent terms, not the level-walking term that makes up most of it.
-        Cautious weights time on hidden steep ground by 1 + {CAUTION_WEIGHT} × the cell's steep share: a heuristic
-        coefficient of ours, not a NASA-certified safety model and not a measured risk. Each route is the least-cost
-        path on the 4 m grid for its own objective; it is then straightened, and the straightened route is not proven
-        optimal. No priority guarantees a safe route.
-      </p>
+      {any && <p className="cmp-key">Smaller figures: difference from Fastest. A difference in one figure, not a ranking.</p>}
+      {any && <p className="cmp-note">{compareModes(props.comparison, props.pending)[props.selected].tradeoff}</p>}
+
+      <details className="cmp-fold">
+        <summary>More</summary>
+        <table>
+          {head}
+          <tbody>{body(table.more)}</tbody>
+        </table>
+      </details>
+
+      <details className="cmp-fold">
+        <summary>About these figures</summary>
+        <dl className="cmp-about">
+          {ROUTE_MODES.map((m) => (
+            <div key={m.id}>
+              <dt>{m.label}</dt>
+              <dd>{OBJECTIVE[m.id].full}</dd>
+            </div>
+          ))}
+          {[...table.primary, ...table.more]
+            .filter((r) => r.hint)
+            .map((r) => (
+              <div key={r.id}>
+                <dt>{r.label}</dt>
+                <dd>{r.hint}</dd>
+              </div>
+            ))}
+        </dl>
+        <p className="footnote">
+          All three routes obey the same hard limits: {MAX_SLOPE_DEG}° maximum slope for every cell and every step walked, no
+          clipping of no-go cells, and the same EVA and return checks. They are measured the same way. Walking energy is an
+          approximation adapted from treadmill research on Earth (Santee et al. 2001), at the model's walking speed; Mars
+          gravity enters only its climb and descent terms, not the level-walking term that makes up most of it. Cautious
+          weights time on hidden steep ground by 1 + {CAUTION_WEIGHT} × the cell's steep share: a heuristic coefficient of
+          ours, not a NASA-certified safety model and not a measured risk. Each route is the least-cost path on the 4 m grid
+          for its own objective; it is then straightened, and the straightened route is not proven optimal, so a figure can
+          come out slightly lower on another priority. No priority guarantees a safe route.
+        </p>
+      </details>
     </div>
   )
 }
@@ -224,19 +260,7 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
         </div>
       </dl>
 
-      <div className="m-mode">
-        <span className="label">Route priority</span>
-        <Segmented
-          label="Route priority"
-          value={s.mode}
-          onChange={s.setMode}
-          options={[
-            { value: 'fastest', label: 'Fastest' },
-            { value: 'energy', label: 'Energy' },
-            { value: 'cautious', label: 'Cautious' },
-          ]}
-        />
-      </div>
+      <ModeCards plan={s} />
     </div>
   )
 }
@@ -364,7 +388,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
         )}
       </Section>
 
-      <Section title="Compare route priorities" defaultOpen={false} aside={ROUTE_MODES.find((m) => m.id === s.mode)!.label}>
+      <Section title="Compare route priorities" aside={ROUTE_MODES.find((m) => m.id === s.mode)!.label}>
         <ModeComparison comparison={s.comparison} selected={s.mode} onSelect={s.setMode} pending={s.pending} />
       </Section>
 
