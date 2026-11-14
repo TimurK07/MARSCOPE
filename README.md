@@ -28,6 +28,11 @@ _Setup and run instructions will be added as the project takes shape._
 
 _Exact datasets and links will be listed here._
 
+## Team
+
+- **Timur Kaliev**
+- **Ilya Krivoshapov**
+
 ## License
 
 [Apache License 2.0](LICENSE)
