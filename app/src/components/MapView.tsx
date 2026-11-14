@@ -6,6 +6,7 @@ import { contourImage, elevationImage, hazardImage, type HazardMode } from '../l
 import { cellAt, elevationAt, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
 import type { RoverStop, RoverTrack } from '../lib/nasa'
 import type { RouteLeg } from '../lib/router'
+import { LOCAL_EXIT_ZOOM } from '../lib/viewTransition'
 
 export interface LayerState {
   on: boolean
@@ -22,6 +23,10 @@ export interface MapHandle {
   zoomOut: () => void
   fitSite: () => void
   fitCrater: () => void
+  /** Current centre and zoom. */
+  getView: () => { lat: number; lon: number; zoom: number }
+  /** Moves to a view at once, without animation, and stops following the study area. */
+  jumpTo: (center: LatLon, zoom: number) => void
   reveal: (p: LatLon, bottomInset?: number) => void
 }
 
@@ -43,6 +48,8 @@ interface Props {
   onHover: (h: HoverInfo | null) => void
   onZoom: (zoom: number) => void
   onMovePoint: (index: number, p: LatLon) => void
+  /** The user zoomed out to the map's minimum zoom. */
+  onMinZoom?: () => void
 }
 
 /** Retries tiles that fail on a flaky connection (Leaflet gives up after one try). */
@@ -76,6 +83,8 @@ function makeTileLayer(def: TileLayerDef, pane: string): L.TileLayer {
   )
 }
 
+const MIN_ZOOM = LOCAL_EXIT_ZOOM
+
 const icon = (html: string, size: number) =>
   L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
 
@@ -91,6 +100,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   const cursorRef = useRef<L.CircleMarker | null>(null)
   const zoomRef = useRef(13)
   const autoFit = useRef(true)
+  const userZoomAt = useRef(0)
   const cb = useRef(props)
   cb.current = props
 
@@ -106,7 +116,17 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     },
     zoomOut: () => {
       autoFit.current = false
+      userZoomAt.current = performance.now()
       mapRef.current?.zoomOut()
+    },
+    getView: () => {
+      const m = mapRef.current!
+      const c = m.getCenter()
+      return { lat: c.lat, lon: c.lng, zoom: m.getZoom() }
+    },
+    jumpTo: (center, zoom) => {
+      autoFit.current = false
+      mapRef.current?.setView([center.lat, center.lon], zoom, { animate: false })
     },
     fitSite: () => {
       autoFit.current = true
@@ -131,13 +151,14 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     const area = siteBounds()
     const map = L.map(el.current!, {
       crs: L.CRS.EPSG4326,
-      minZoom: 7,
+      minZoom: MIN_ZOOM,
       maxZoom: 19,
       zoomSnap: 0.25,
       zoomDelta: 0.5,
       zoomControl: false,
       attributionControl: true,
-      maxBounds: L.latLngBounds([-8.2, 134.0], [-1.6, 140.6]),
+      // Wide enough for the regional view at the minimum zoom, where the globe takes over.
+      maxBounds: L.latLngBounds([-24, 118], [14, 158]),
       maxBoundsViscosity: 0.8,
     })
     mapRef.current = map
@@ -170,6 +191,8 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     map.on('zoomend', () => {
       zoomRef.current = map.getZoom()
       cb.current.onZoom(map.getZoom())
+      // Zooming out as far as the map goes hands the view back to the globe.
+      if (map.getZoom() <= MIN_ZOOM + 0.01 && performance.now() - userZoomAt.current < 1500) cb.current.onMinZoom?.()
     })
 
     map.fitBounds(area, { padding: [24, 24] })
@@ -180,7 +203,10 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     // While the view is "following" the study area (initially, and after Fit),
     // refit whenever the stage changes size: dock, panels, window.
     autoFit.current = true
-    const stopFollowing = () => (autoFit.current = false)
+    const stopFollowing = (e: Event) => {
+      autoFit.current = false
+      if (e.type !== 'mousedown') userZoomAt.current = performance.now()
+    }
     const container = map.getContainer()
     for (const ev of ['mousedown', 'touchstart', 'wheel'] as const) {
       container.addEventListener(ev, stopFollowing, { passive: true })

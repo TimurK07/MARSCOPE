@@ -258,3 +258,18 @@
 .is-mobile .sec-head {
   min-height: 44px;
 }
+
+/* three-way extent switch has to fit beside the wordmark */
+.is-mobile .wordmark {
+  font-size: var(--fs-sm);
+  letter-spacing: 0.14em;
+}
+.is-mobile .topbar .seg button {
+  padding: 0 8px;
+}
+.is-mobile .topbar-tools .icon-btn {
+  width: 32px;
+}
+.is-mobile .gl-mission small {
+  display: none;
+}

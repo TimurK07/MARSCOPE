@@ -10,7 +10,15 @@ Built for the **NASA Space Apps Challenge 2026**, challenge *Interplanetary Surv
 
 MARSCOPE plans a surface EVA ("Marswalk") on Mount Sharp in Gale crater, the area Curiosity is exploring right now.
 
-The interface is a map-first workspace: a tool rail on the left, the map in the centre with a dock underneath, and the mission panel on the right.
+MARSCOPE opens on an interactive 3D globe of Mars and continues into a 2D mission workspace, as one place seen at two scales.
+
+- **Global view: 3D Mars.** A sphere textured with the Viking MDIM 2.1 color mosaic. Rotate, zoom, and pick any point to read its coordinates, MOLA elevation and geologic unit. Feature names come from the IAU/USGS gazetteer. Imagery sharpens as you approach, from the same NASA Mars Trek tiles the 2D map uses, down to the MRO CTX mosaic inside Gale crater.
+- **One continuous descent.** Zoom into the study area, or press *Enter Gale crater workspace*, and the globe hands over to the 2D map at the same centre, scale and orientation. Zoom the map all the way out, or press *Mars*, to return. The mission is never reset.
+- **The mission on the planet.** At planetary scale the plan is a marker with its verdict. Closer in you see the study area frame, and closer still the real route geometry and checkpoints, at true size.
+- **Aligned handover.** On the final approach the globe's view slides so that its focus sits exactly where the centre of the 2D map is, whatever the window size or panel state. Up close it shows the same HiRISE and CTX tiles as the map.
+- **Honest limits.** The globe is imagery on a sphere, with no terrain relief. Routing and GO / NO-GO exist only inside the study area, where the 1 m terrain model is; a point picked anywhere else says so.
+
+The local view is a map-first workspace: a tool rail on the left, the map in the centre with a dock underneath, and the mission panel on the right.
 
 - **Mission map.** HiRISE, CTX and Viking imagery of the site, with the planned route, Curiosity's traverse and the crew's checkpoints drawn on top. The map takes about three quarters of the screen.
 - **Tool rail and data panes.** Map layers, environment, scientific context and sources open as panes over the map. Each layer has a description, a legend, a switch and an opacity control.
@@ -34,12 +42,16 @@ app/                 Web app (Vite + React + TypeScript + Leaflet), no backend
   src/lib/router.ts  A* least-time route search over the terrain grid
   src/lib/overlays.ts Slope hazard, elevation tint and contour rasters
   src/lib/advice.ts  Plain-language guidance for a NO-GO plan
+  src/lib/globe.ts   Mars sphere geometry: coordinates, great circles, altitude and zoom
+  src/lib/globeEngine.ts 3D globe renderer (three.js), loaded lazily
+  src/lib/viewTransition.ts Rules for moving between the globe and the 2D map
   src/components/    Map, tool rail, data panes, dock, mission panel, mobile sheet
   src/hooks/usePlan.ts Checkpoints with undo, route and go/no-go checks
   src/styles/        Design tokens and styles by workspace area
   public/data/gale/  Terrain grids produced by the script below
 scripts/
   prepare_terrain.py Downloads the DEM patch from NASA Mars Trek and computes slope
+  fetch_globe_assets.py Downloads the globe's first texture and the feature names
 docs/
   DATA_SOURCES.md    Every NASA dataset and endpoint we use, with links
 ```
@@ -55,6 +67,8 @@ npm run dev
 ```
 
 Then open http://localhost:5173. Click **Load example** in the EVA plan panel to see a planned route.
+
+If WebGL is slow or missing, add `?view=2d` to the address to open straight in the 2D workspace (this also happens by itself when WebGL cannot start).
 
 To build a static site: `npm run build` (output in `app/dist`). To run the unit tests for the model and the route search: `npm test`.
 
@@ -81,7 +95,8 @@ The suited mass and the time spent at each target are planning inputs the user s
 
 ## NASA data used
 
-- **NASA JPL Mars Trek**: HiRISE and CTX mosaics, HiRISE 1 m DEM, THEMIS infrared mosaics, Viking color mosaic, USGS global geologic map.
+- **USGS Astrogeology**: Viking MDIM 2.1 colorized global mosaic (credit NASA/JPL/USGS), IAU Gazetteer of Planetary Nomenclature.
+- **NASA JPL Mars Trek**: MOLA global elevation, HiRISE and CTX mosaics, HiRISE 1 m DEM, THEMIS infrared mosaics, Viking color mosaic, USGS global geologic map.
 - **Mars Science Laboratory (Curiosity)**: rover traverse and waypoints, raw Navcam images, REMS weather reports, RAD radiation measurements.
 
 Exact dataset names and URLs: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).

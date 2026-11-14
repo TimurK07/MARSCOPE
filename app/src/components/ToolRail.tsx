@@ -17,12 +17,14 @@ interface Props {
   canUndo: boolean
   onUndo: () => void
   onHelp: () => void
+  /** Not reachable while the globe covers the workspace. */
+  inert?: boolean
 }
 
 /** Vertical tool rail: opens the data panes over the map. */
-export default function ToolRail({ active, onSelect, layerCount, canUndo, onUndo, onHelp }: Props) {
+export default function ToolRail({ active, onSelect, layerCount, canUndo, onUndo, onHelp, inert }: Props) {
   return (
-    <nav className="rail" aria-label="Tools">
+    <nav className="rail" aria-label="Tools" inert={inert}>
       <div className="rail-mark" title="MARSCOPE" aria-hidden="true" />
       <div className="rail-group">
         {RAIL_PANES.map((p) => (

@@ -1,0 +1,418 @@
+/* 3D globe and its heads-up display */
+
+.globe-wrap {
+  /* Covers the window, so the planet is not confined to the workspace's map area. */
+  position: fixed;
+  inset: 0;
+  /* Above the tool rail (700), below the mobile sheet (800) and the briefing (950). */
+  z-index: 750;
+  isolation: isolate;
+  background: #060607;
+  opacity: 1;
+  transition: opacity 0.52s ease;
+}
+.globe-wrap.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.globe-wrap > .topbar {
+  position: absolute;
+  z-index: 8;
+  left: 0;
+  right: 0;
+  top: 0;
+  background: rgb(18 20 22 / 0.9);
+}
+.globe-wrap > .toast {
+  z-index: 9;
+  bottom: 44px;
+}
+.globe {
+  position: absolute;
+  inset: 0;
+}
+.globe-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+.globe-canvas:active {
+  cursor: grabbing;
+}
+.globe-canvas:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent-hi);
+}
+.globe-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+}
+
+.globe-overlays {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.globe.is-paused .globe-overlays {
+  visibility: hidden;
+}
+.globe-overlays > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+/* feature names from the IAU gazetteer */
+.gl-label {
+  margin: -7px 0 0 0;
+  padding-left: 10px;
+  color: #f3ede4;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow:
+    0 0 3px #000,
+    0 0 8px rgb(0 0 0 / 0.9);
+}
+.gl-label::before {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #f3ede4;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.6);
+}
+.gl-label.band-global {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: rgb(243 237 228 / 0.82);
+}
+.gl-label.band-regional {
+  color: var(--accent-hi);
+}
+.gl-label.band-regional::before {
+  background: var(--accent-hi);
+}
+
+/* mission marker at planetary scale */
+.gl-mission {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -9px 0 0 -9px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.gl-mission i {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--accent-hi);
+  border-radius: 50%;
+  background: rgb(12 13 15 / 0.55);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.7);
+  position: relative;
+}
+.gl-mission i::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--accent-hi);
+}
+.gl-mission.tone-go i {
+  border-color: var(--go);
+}
+.gl-mission.tone-go i::after {
+  background: var(--go);
+}
+.gl-mission.tone-nogo i {
+  border-color: var(--nogo);
+}
+.gl-mission.tone-nogo i::after {
+  background: var(--nogo);
+}
+.gl-mission span {
+  display: grid;
+  padding: 3px 8px 4px;
+  background: rgb(18 20 22 / 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+.gl-mission b {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.gl-mission small {
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+.gl-mission:hover span {
+  border-color: var(--accent);
+}
+
+.gl-pin {
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+}
+.gl-rover span {
+  position: absolute;
+  left: 26px;
+  top: 8px;
+  color: var(--rover);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-shadow: 0 0 3px #000;
+}
+
+/* heads-up display */
+.hud {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+.hud > * {
+  pointer-events: auto;
+}
+.hud-tools {
+  position: absolute;
+  right: 12px;
+  top: calc(var(--topbar-h) + 12px);
+  display: grid;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: rgb(18 20 22 / 0.92);
+  overflow: visible;
+}
+.hud-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.hud-btn + .hud-btn {
+  border-top: 1px solid var(--line-strong);
+}
+.hud-btn:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+.hud-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s 0.25s;
+}
+.hud-btn:hover::after,
+.hud-btn:focus-visible::after {
+  opacity: 1;
+}
+
+.hud-card {
+  position: absolute;
+  width: 268px;
+  padding: 12px 14px 14px;
+  background: rgb(18 20 22 / 0.94);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+}
+.hud-mission {
+  left: 14px;
+  bottom: 40px;
+  border-top: 2px solid var(--accent);
+}
+.hud-mission.tone-go {
+  border-top-color: var(--go);
+}
+.hud-mission.tone-nogo {
+  border-top-color: var(--nogo);
+}
+.hud-mission strong {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.hud-mission.tone-go strong {
+  color: var(--go);
+}
+.hud-mission.tone-nogo strong {
+  color: var(--nogo);
+}
+.hud-mission p {
+  margin: 4px 0 12px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.hud-selection {
+  right: 14px;
+  bottom: 40px;
+}
+.hud-selection header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: -4px -6px 6px 0;
+}
+.hud-selection h3 {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.hud-selection dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+}
+.hud-selection dt {
+  color: var(--text-3);
+  font-size: var(--fs-xs);
+}
+.hud-selection dd {
+  font-family: var(--mono);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hud-note {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+}
+.hud-status {
+  margin: 10px 0;
+  padding-left: 9px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.hud-status.is-ok {
+  border-left-color: var(--go);
+}
+.hud-selection .hud-status:last-child {
+  margin-bottom: 0;
+}
+
+.hud-read {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--status-h);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 12px;
+  background: rgb(11 12 14 / 0.78);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.hud-read b {
+  margin-right: 7px;
+  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.hud-credit {
+  margin-left: auto;
+  color: var(--text-3);
+  font-family: var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The 2D map's analysis overlays settle in after the handover instead of popping. */
+.stage .leaflet-raster-pane {
+  transition: opacity 0.7s ease;
+}
+.stage.is-arriving .leaflet-raster-pane {
+  opacity: 0;
+  transition: none;
+}
+
+.hud-busy {
+  color: var(--text-3);
+  font-family: var(--font);
+}
+.hud-busy::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--accent-hi);
+  animation: busy 1.1s ease-in-out infinite alternate;
+}
+@keyframes busy {
+  from {
+    opacity: 0.25;
+  }
+}
+
+/* On a phone the sheet stays in reach under the globe. */
+.is-mobile .globe-wrap {
+  bottom: 78px;
+}
+.is-mobile .hud-tools {
+  top: calc(var(--topbar-h) + 10px);
+  right: 10px;
+}
+.is-mobile .hud-btn {
+  width: 42px;
+  height: 42px;
+}
+.is-mobile .hud-credit {
+  display: none;
+}

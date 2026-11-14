@@ -95,7 +95,21 @@ Coordinates: we normalise everything to **planetocentric latitude, longitude −
 | Past landing sites | PDS ODE landing sites | https://ode.rsl.wustl.edu/mars/pagehelp/Content/Missions_Instruments/Landing_Sites.htm | table |
 | Place names | IAU/USGS Gazetteer of Planetary Nomenclature | https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/MARS_nomenclature_center_pts.zip | shapefile, 5.4 MB, 0–360°E |
 
-## 5. Model constants
+## 5. 3D globe
+
+| Use | Dataset | URL | Notes |
+|---|---|---|---|
+| First globe texture (bundled, 2048 × 1024, 382 kB) | Viking MDIM 2.1 colorized global mosaic | USGS Astrogeology WMS, layer `MDIM21_color`: https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/mars/mars_simp_cyl.map&service=WMS&request=GetCapabilities | Service metadata: Fees "None", AccessConstraints "None". Credit NASA/JPL/USGS. Fetched by `scripts/fetch_globe_assets.py` |
+| Sharper globe texture (4096 × 2048, loaded at run time) | same layer, same service | same | one request |
+| Detail on approach | Viking MDIM 2.1 tiles (zoom 4–7) and Gale CTX mosaic tiles (zoom 8–12) | NASA JPL Mars Trek, see section 1 | the same tiles the 2D map shows |
+| Feature names and positions | IAU/USGS Gazetteer of Planetary Nomenclature | https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/MARS_nomenclature_center_pts.zip | planetocentric, east-positive 0–360; 16 features used |
+| Elevation of a picked point | MGS MOLA global DEM | https://trek.nasa.gov/mars/trekarcgis/rest/services/mola128_mola64_merge_90Nto90S_SimpleC_clon0/ImageServer/identify | see section 2 |
+
+The globe has no elevation model: it is imagery on the Mars 2000 sphere (radius 3,396,190 m).
+
+We could not open the USGS copyright policy page from our environment, so the usage terms above rest on the WMS service's own metadata.
+
+## 6. Model constants
 
 | Constant | Value | Source |
 |---|---|---|
