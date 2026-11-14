@@ -5,7 +5,7 @@
 // planned EVA with operational limits. A plan without a feasible route never
 // reaches them, so it can never be GO.
 
-import { fmtDur, fmtKm } from './format'
+import { fmtDur } from './format'
 import { EVA, PLANNING_PACE, RETURN_LIMITS } from './model'
 import type { WalkBack } from './returnCheck'
 
@@ -37,6 +37,11 @@ export interface MissionInput {
   evaSeconds: number
   /** Worst-case walk back to the habitat, or null when it could not be computed. */
   walkBack: WalkBack | null
+  /**
+   * The return distance limit the plan was checked against, metres. The default when left
+   * out. It must be the limit the return check itself used: this module only reports it.
+   */
+  returnDistanceM?: number
 }
 
 // Return figures are rounded against the plan, so a display can never look better than
@@ -65,7 +70,7 @@ function timeMargin(s: number, limit: number): string {
 
 export function buildChecks(i: MissionInput): Check[] {
   const durLimit = EVA.maxDuration_h * 3600
-  const distLimit = RETURN_LIMITS.distance_m
+  const distLimit = i.returnDistanceM ?? RETURN_LIMITS.distance_m
   const timeLimit = RETURN_LIMITS.time_s
   const back = i.walkBack
   // No way back at all from somewhere on the route fails both return checks outright.
@@ -100,7 +105,7 @@ export function buildChecks(i: MissionInput): Check[] {
       id: 'walkback-distance',
       label: 'Way back to habitat: distance',
       value: lost ? 'no way back' : open ? 'not verified' : kmUp(back.maxDistance),
-      limit: `≤ ${fmtKm(distLimit).replace('.00', '')}`,
+      limit: `≤ ${+(distLimit / 1000).toFixed(2)} km`,
       ok: distOk,
       state: state(distOk),
       ratio: lost ? Infinity : open ? 0 : back.maxDistance / distLimit,

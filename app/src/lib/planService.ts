@@ -7,9 +7,8 @@
 
 import { LatestOnly } from './latest'
 import type { RouteMode } from './objectives'
-import { computePlan, modeOrder, type LegCache, type Plan, type PlanInput, type Plans } from './planner'
+import { computePlan, modeOrder, returnFieldFor, type LegCache, type Plan, type PlanInput, type Plans } from './planner'
 import type { WorkerReply, WorkerRequest } from './planner.worker'
-import { WalkBackField } from './router'
 import type { Terrain } from './terrain'
 
 /** The part of a Worker this service uses. */
@@ -153,7 +152,8 @@ export class PlanService {
     const job = this.current
     if (!job || job.ticket !== ticket) return
     const order = modeOrder(job.first).filter((m) => job.plans[m] === null)
-    const field = new WalkBackField(this.opts.terrain, job.input.points[0])
+    // The same return check the worker would build: this request's habitat and return limits.
+    const field = returnFieldFor(this.opts.terrain, job.input)
     const step = (i: number) => {
       const timer = setTimeout(() => {
         this.timers.delete(timer)

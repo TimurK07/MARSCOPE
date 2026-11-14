@@ -354,6 +354,53 @@ describe('missions on the real grid', () => {
     expect(verdictOf('mesa')).toBe('noroute')
   })
 
+  it('return distance limit on the real grid: the verdict follows the limit, and each one is checked independently', () => {
+    // [mission, limit in metres]. At the default limit the example's way back from its far end is shown as 885 m,
+    // the quickest one. A shorter one exists (about 750 m), so the plan still passes at 0.8 km: the check looks for
+    // a way back within the limit chosen, it does not compare the limit with the figure it showed before.
+    const cases: [string, number][] = [['example', 700], ['example', 800], ['audit_case', 1200], ['audit_case', 1300], ['audit_case', 2000], ['east', 3000]]
+    const rows: Record<string, unknown> = {}
+    const details: Record<string, string> = {}
+    for (const [name, limit] of cases) {
+      const input = { ...MISSIONS[name], returnDistanceM: limit }
+      const plans = computeAllPlans(t, input)
+      const field = new WalkBackField(t, EXAMPLE[0], { distance_m: limit, time_s: T })
+      const seen = new Set<string>()
+      for (const m of ROUTE_MODES) {
+        const p = plans[m.id]!
+        const s = summarise(p, input, 20)!
+        const cells = [...new Set(p.samples.map((q) => cellAt(t, q)))]
+        // No way back can be within the limits from a cell whose shortest is over the distance limit or fastest over the hour.
+        const provenFail = cells.some((c) => shortest[c] > limit || fastest[c] > T)
+        let provenPass = true
+        for (const c of cells) {
+          const path = field.returnPath(c)
+          const sums = path && path[0] === c && path[path.length - 1] === home ? rewalk(path) : null
+          if (!sums || sums.d > limit || sums.s > T) provenPass = false
+        }
+        const independent = provenFail ? 'nogo' : provenPass ? 'go' : 'undetermined'
+        expect(independent, `${name} at ${limit} m, ${m.id}`).not.toBe('undetermined')
+        expect(s.verdict, `${name} at ${limit} m, ${m.id}`).toBe(independent)
+        expect(s.checks!.find((c) => c.id === 'walkback-distance')!.limit).toBe(`≤ ${limit / 1000} km`)
+        expect(p.walkBack!.verified).toBe(true)
+        seen.add(s.verdict)
+      }
+      expect(seen.size).toBe(1)
+      rows[`${name} @ ${limit / 1000} km`] = [...seen][0]
+      const back = plans.fastest!.walkBack!
+      details[`${name} @ ${limit / 1000} km`] = `${[...seen][0]}: way back ${back.maxDistance.toFixed(0)} m in ${(back.maxTime / 60).toFixed(1)} min`
+    }
+    report.return_limit_cases = details
+    // The limit moves these verdicts both ways.
+    expect(rows['example @ 0.7 km']).toBe('nogo')
+    expect(rows['example @ 0.8 km']).toBe('go')
+    expect(rows['audit_case @ 1.2 km']).toBe('nogo')
+    expect(rows['audit_case @ 1.3 km']).toBe('go')
+    expect(rows['audit_case @ 2 km']).toBe('go')
+    // And above 2 km it cannot rescue a plan whose way back takes over an hour.
+    expect(rows['east @ 3 km']).toBe('nogo')
+  })
+
   it('example mission with long stops: under 8 h by the model, over at the planning pace, NO-GO in every mode', () => {
     const input = MISSIONS.example
     const plans = computeAllPlans(t, input)

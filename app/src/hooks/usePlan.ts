@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RouteMode } from '../lib/objectives'
 import { ROUTE_MODES } from '../lib/objectives'
+import { clampReturnDistance, RETURN_DISTANCE_RANGE } from '../lib/model'
 import { summarise, type ModeSummary, type Plan, type PlanInput } from '../lib/planner'
 import { PlanService, type PlanUpdate, type WorkerLike } from '../lib/planService'
 import type { LatLon, Terrain } from '../lib/terrain'
@@ -26,6 +27,9 @@ export function usePlan(terrain: Terrain | null) {
   const [roundTrip, setRoundTrip] = useState(true)
   const [stopMinutes, setStopMinutes] = useState(20)
   const [massKg, setMassKg] = useState(180)
+  // Longest acceptable way back, metres. A planning assumption the user can set; 2 km by default.
+  const [returnDistanceM, setReturnDistanceRaw] = useState(RETURN_DISTANCE_RANGE.default_m)
+  const setReturnDistanceM = useCallback((m: number) => setReturnDistanceRaw(clampReturnDistance(m)), [])
   const [mode, setMode] = useState<RouteMode>('fastest')
   const [result, setResult] = useState<PlanUpdate | null>(null)
   const [pending, setPending] = useState(false)
@@ -79,13 +83,14 @@ export function usePlan(terrain: Terrain | null) {
       setPending(false)
       return
     }
-    const input: PlanInput = { points, roundTrip, massKg }
+    const input: PlanInput = { points, roundTrip, massKg, returnDistanceM }
     setPending(true)
     s.request(input, modeRef.current)
-  }, [serviceReady, points, roundTrip, massKg])
+  }, [serviceReady, points, roundTrip, massKg, returnDistanceM])
 
   // A result is shown only for the checkpoints it was computed for.
-  const fresh = result && result.input.points === points ? result : null
+  // ...and for the return limit it was checked against: a verdict for another limit is never shown.
+  const fresh = result && result.input.points === points && result.input.returnDistanceM === returnDistanceM ? result : null
   const plan: Plan | null = fresh?.plans[mode] ?? null
 
   const comparison = useMemo(() => {
@@ -117,6 +122,10 @@ export function usePlan(terrain: Terrain | null) {
     setStopMinutes,
     massKg,
     setMassKg,
+    /** Return distance limit in metres, and whether it is the default. */
+    returnDistanceM,
+    setReturnDistanceM,
+    returnDistanceIsDefault: returnDistanceM === RETURN_DISTANCE_RANGE.default_m,
     mode,
     setMode,
     /** True while routes for the current checkpoints are still being computed. */

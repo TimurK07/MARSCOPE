@@ -362,11 +362,12 @@ export default function App() {
   const planRoute = plan.plan
   const planChecks = plan.checks
   const planRoundTrip = plan.roundTrip
+  const planReturnM = plan.returnDistanceM
   const planVerdict = verdictOf(plan)
   // How the plan is drawn, for the 2D map, the globe and the legends alike.
   const display = useMemo(
-    () => routeDisplay({ points: planPoints, roundTrip: planRoundTrip, plan: planRoute, checks: planChecks, verdict: planVerdict }),
-    [planPoints, planRoundTrip, planRoute, planChecks, planVerdict],
+    () => routeDisplay({ points: planPoints, roundTrip: planRoundTrip, plan: planRoute, checks: planChecks, verdict: planVerdict, returnDistanceM: planReturnM }),
+    [planPoints, planRoundTrip, planRoute, planChecks, planVerdict, planReturnM],
   )
   const summary = missionSummary(plan)
   const summaryKey = `${summary.title}|${summary.detail}|${summary.tone}`

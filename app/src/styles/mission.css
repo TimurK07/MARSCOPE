@@ -473,3 +473,48 @@
 .cmp td.v-unverified {
   color: var(--warn);
 }
+
+/* return distance limit: a planning assumption the user can set */
+.return-limit {
+  margin-bottom: 12px;
+  padding: 9px 10px 8px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  border-radius: var(--r-md);
+}
+.return-limit.is-custom {
+  border-left-color: var(--accent);
+  background: var(--accent-wash);
+}
+.return-limit label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.return-limit-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.return-limit-tag {
+  font: var(--fs-xs) var(--mono);
+  color: var(--text-3);
+}
+.return-limit.is-custom .return-limit-tag {
+  color: var(--accent-hi);
+}
+.return-limit .footnote {
+  margin-top: 6px;
+}
+.is-mobile .return-limit .num input {
+  height: 36px;
+  width: 76px;
+}
+.is-mobile .return-limit .btn {
+  min-height: 36px;
+}

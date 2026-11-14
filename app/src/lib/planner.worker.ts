@@ -3,8 +3,7 @@
 // three routes and their walk-back checks are computed.
 
 import type { RouteMode } from './objectives'
-import { computePlan, modeOrder, type LegCache, type Plan, type PlanInput } from './planner'
-import { WalkBackField } from './router'
+import { computePlan, modeOrder, returnFieldFor, type LegCache, type Plan, type PlanInput } from './planner'
 import type { Terrain } from './terrain'
 
 export type WorkerRequest =
@@ -30,7 +29,8 @@ async function run() {
     // Requests that arrived while we were busy are skipped: only the newest matters.
     const job = pending
     pending = null
-    const field = new WalkBackField(terrain, job.input.points[0])
+    // The return check for this request's habitat and its return limits.
+    const field = returnFieldFor(terrain, job.input)
     const order = modeOrder(job.first)
     for (let i = 0; i < order.length; i++) {
       const plan = computePlan(terrain, job.input, order[i], cache, field)

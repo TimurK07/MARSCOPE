@@ -126,11 +126,47 @@ export const EVA = {
  * (planningSpeedMs), the pace the hour was sized for.
  */
 export const RETURN_LIMITS = {
-  /** Longest acceptable way back, metres. */
+  /** Longest acceptable way back, metres. The default; the planner lets the user change it. */
   distance_m: 2000,
   /** Slowest acceptable way back, seconds. */
   time_s: 3600,
 }
+
+/**
+ * The range in which the return distance limit can be set, metres.
+ *
+ * These are MARSCOPE planning choices, not validated limits: no value in this
+ * range is known to be safe on Mars, and none is certified by NASA.
+ *
+ *   default  2 km, the lunar excursion radius in NASA EVA-EXP-0075.
+ *   minimum  0.5 km: below that, little of the study area beyond the habitat's
+ *            own surroundings could be reached.
+ *   maximum  3 km. Raising the limit above 2 km cannot make a plan pass: the
+ *            way back must also take no more than 60 minutes at no more than
+ *            2 km/h, which already caps it at 2 km. Larger values are allowed
+ *            only so that the two limits can be seen apart.
+ */
+export const RETURN_DISTANCE_RANGE = {
+  min_m: 500,
+  max_m: 3000,
+  step_m: 100,
+  default_m: RETURN_LIMITS.distance_m,
+}
+
+/** A return distance limit the planner accepts: within the range, on the step; the default for anything else. */
+export function clampReturnDistance(metres: number | undefined | null): number {
+  const r = RETURN_DISTANCE_RANGE
+  if (metres == null || !Number.isFinite(metres)) return r.default_m
+  const stepped = Math.round(metres / r.step_m) * r.step_m
+  return Math.min(r.max_m, Math.max(r.min_m, stepped))
+}
+
+/**
+ * The farthest a way back can be and still take the allowed time at the
+ * planning pace on level ground: 2 km. Distance limits above this are not the
+ * binding ones.
+ */
+export const RETURN_DISTANCE_AT_PACE_M = PLANNING_PACE.max_ms * RETURN_LIMITS.time_s
 
 export const RADIATION = {
   /**

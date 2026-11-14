@@ -3,7 +3,7 @@ import { adviceFor } from '../lib/advice'
 import { buildChecks, type Verdict } from '../lib/mission'
 import { CAUTION_WEIGHT, ROUTE_MODES, type RouteMode } from '../lib/objectives'
 import type { ModeSummary } from '../lib/planner'
-import { EVA, MAX_SLOPE_DEG, PLANNING_PACE, RADIATION, RETURN_LIMITS } from '../lib/model'
+import { EVA, MAX_SLOPE_DEG, PLANNING_PACE, RADIATION, RETURN_DISTANCE_AT_PACE_M, RETURN_DISTANCE_RANGE, RETURN_LIMITS } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
 import { Datum, Icon, Section, Segmented } from './ui'
 import { fmtDose, fmtSlope } from '../lib/format'
@@ -258,7 +258,10 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
     ? { points, walkTime: plan.planWalkTime, stopMinutes: s.stopMinutes, walkBack: plan.walkBack }
     : null
   // With no route yet, show the limits the plan will be held to.
-  const idleChecks = buildChecks({ evaSeconds: 0, walkBack: null }).map((c) => ({ ...c, value: '—', ok: true, ratio: 0, margin: '' }))
+  const returnKm = +(s.returnDistanceM / 1000).toFixed(2)
+  // What is being typed into the return limit field, until it is a usable value.
+  const [returnDraft, setReturnDraft] = useState<string | null>(null)
+  const idleChecks = buildChecks({ evaSeconds: 0, walkBack: null, returnDistanceM: s.returnDistanceM }).map((c) => ({ ...c, value: '—', ok: true, ratio: 0, margin: '' }))
   const targets = Math.max(points.length - 1, 0)
   // Hidden steep ground along the route, where the terrain data has it.
   const withHidden = ready ? plan.legs.filter((l) => l.hiddenCells != null) : []
@@ -406,7 +409,13 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
         title="Mission constraints"
         open={constraintsOpen}
         onToggle={setConstraintsOpen}
-        aside={checks ? `${checks.length - failed.length} of ${checks.length} met${verdict === 'unverified' ? ', not verified' : ''}` : undefined}
+        aside={
+          checks
+            ? `${checks.length - failed.length} of ${checks.length} met${verdict === 'unverified' ? ', not verified' : ''}${s.returnDistanceIsDefault ? '' : ` · return ≤ ${returnKm} km`}`
+            : s.returnDistanceIsDefault
+              ? undefined
+              : `return ≤ ${returnKm} km`
+        }
       >
         <p className={`feasible ${verdict === 'noroute' ? 'is-bad' : ready ? 'is-ok' : ''}`}>
           <b>Route feasibility</b>
@@ -418,6 +427,56 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
                 : `Legs must stay on ground of ${MAX_SLOPE_DEG}° or less.`}
           </span>
         </p>
+        <div className={`return-limit ${s.returnDistanceIsDefault ? '' : 'is-custom'}`}>
+          <label title="Longest acceptable way back to the habitat. A MARSCOPE planning assumption, not a NASA-certified limit for Mars EVAs.">
+            <span>Return distance limit</span>
+            <span className="num">
+              <input
+                type="number"
+                inputMode="decimal"
+                min={RETURN_DISTANCE_RANGE.min_m / 1000}
+                max={RETURN_DISTANCE_RANGE.max_m / 1000}
+                step={RETURN_DISTANCE_RANGE.step_m / 1000}
+                value={returnDraft ?? returnKm}
+                aria-describedby="return-limit-note"
+                onChange={(e) => {
+                  // While typing, a value is applied only once it is inside the range; anything else
+                  // ("0", "0.", an empty field) waits, so the field never fights the keyboard.
+                  setReturnDraft(e.target.value)
+                  const m = Number(e.target.value) * 1000
+                  if (e.target.value !== '' && m >= RETURN_DISTANCE_RANGE.min_m && m <= RETURN_DISTANCE_RANGE.max_m) s.setReturnDistanceM(m)
+                }}
+                onBlur={(e) => {
+                  // On leaving the field the value is brought into the range, or put back if it is not a number.
+                  if (e.target.value !== '' && Number.isFinite(Number(e.target.value))) s.setReturnDistanceM(Number(e.target.value) * 1000)
+                  setReturnDraft(null)
+                }}
+              />
+              km
+            </span>
+          </label>
+          <div className="return-limit-meta">
+            <span className="return-limit-tag">{s.returnDistanceIsDefault ? 'Default' : `Custom · default ${RETURN_DISTANCE_RANGE.default_m / 1000} km`}</span>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                setReturnDraft(null)
+                s.setReturnDistanceM(RETURN_DISTANCE_RANGE.default_m)
+              }}
+              disabled={s.returnDistanceIsDefault}
+            >
+              Reset to {RETURN_DISTANCE_RANGE.default_m / 1000} km
+            </button>
+          </div>
+          <p id="return-limit-note" className="footnote">
+            A MARSCOPE planning assumption you can set from {RETURN_DISTANCE_RANGE.min_m / 1000} to {RETURN_DISTANCE_RANGE.max_m / 1000} km.
+            No value is validated or certified as safe for Mars. The way back must also take no more than{' '}
+            {RETURN_LIMITS.time_s / 60} min at no more than {PLANNING_PACE.max_kmh} km/h.
+            {s.returnDistanceM > RETURN_DISTANCE_AT_PACE_M &&
+              ` At that pace ${RETURN_LIMITS.time_s / 60} min covers at most ${RETURN_DISTANCE_AT_PACE_M / 1000} km, so a limit above ${RETURN_DISTANCE_AT_PACE_M / 1000} km cannot make a plan pass: the time limit decides.`}
+          </p>
+        </div>
         <ul className="limits">
           {(checks ?? idleChecks).map((c) => {
             const advice = checks && !c.ok && adviceInput ? adviceFor(c.id, adviceInput) : null
@@ -445,7 +504,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           and one hour of secondary oxygen. The {EVA.maxDuration_h}-hour limit is applied to the EVA duration at the
           planning pace (walking no faster than {PLANNING_PACE.max_kmh} km/h, plus the time at the targets); the duration by
           the speed model alone is shown above and under Route telemetry. The return limits are{' '}
-          {RETURN_LIMITS.distance_m / 1000} km and {RETURN_LIMITS.time_s / 60} min. A plan passes only if, from
+          {returnKm} km (set above; {RETURN_DISTANCE_RANGE.default_m / 1000} km by default) and {RETURN_LIMITS.time_s / 60} min. A plan passes only if, from
           every point of the route, one and the same way back meets both limits, with its time counted at no more than{' '}
           {PLANNING_PACE.max_kmh} km/h; the two figures above describe that path from the worst point. Passing this check
           is a planning result under these assumptions, not a guarantee of a safe return on Mars. Ways back follow the terrain grid towards the habitat, so a climb home counts as

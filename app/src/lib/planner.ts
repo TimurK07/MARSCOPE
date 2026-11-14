@@ -4,7 +4,8 @@
 
 import { fmtDur } from './format'
 import { buildChecks, missionVerdict, type Check, type Verdict } from './mission'
-import { backgroundDoseMsv, surfaceDistanceM } from './model'
+import { backgroundDoseMsv, clampReturnDistance, RETURN_LIMITS, surfaceDistanceM } from './model'
+import type { ReturnLimits } from './returnCheck'
 import { makeObjective, ROUTE_MODES, type RouteMode } from './objectives'
 import { findLeg, WalkBackField, type LegResult, type RouteLeg, type RouteSample, type WalkBack } from './router'
 import type { LatLon, Terrain } from './terrain'
@@ -14,6 +15,22 @@ export interface PlanInput {
   roundTrip: boolean
   /** Suited mass, kg. Changes the energy-efficient route, not the others. */
   massKg: number
+  /**
+   * Longest acceptable way back to the habitat, metres. A planning assumption the
+   * user can set; 2 km when left out. It changes the return check and nothing else:
+   * routes, their geometry and the 60-minute return time limit stay as they are.
+   */
+  returnDistanceM?: number
+}
+
+/** The return limits a plan is held to: the distance from the input, the time always the default. */
+export function returnLimitsOf(input: Pick<PlanInput, 'returnDistanceM'>): ReturnLimits {
+  return { distance_m: clampReturnDistance(input.returnDistanceM), time_s: RETURN_LIMITS.time_s }
+}
+
+/** A return-check field for a plan's habitat and its limits. Build one per plan and share it between the modes. */
+export function returnFieldFor(t: Terrain, input: PlanInput): WalkBackField {
+  return new WalkBackField(t, input.points[0], returnLimitsOf(input))
 }
 
 /**
@@ -127,7 +144,7 @@ export function computePlan(t: Terrain, input: PlanInput, mode: RouteMode, cache
     energyFixed: sum((l) => l.energyFixed),
     farthest,
     // Only a complete, feasible route is assessed for the way back.
-    walkBack: error ? null : (field ?? new WalkBackField(t, points[0])).assess(samples),
+    walkBack: error ? null : (field ?? returnFieldFor(t, input)).assess(samples),
     exposure: withData
       ? {
           load,
@@ -150,7 +167,7 @@ export function modeOrder(first?: RouteMode): RouteMode[] {
 
 export function computeAllPlans(t: Terrain, input: PlanInput, cache?: LegCache): Plans {
   const out = {} as Plans
-  const field = input.points.length >= 2 ? new WalkBackField(t, input.points[0]) : undefined
+  const field = input.points.length >= 2 ? returnFieldFor(t, input) : undefined
   for (const m of modeOrder()) out[m] = computePlan(t, input, m, cache, field)
   return out
 }
@@ -187,7 +204,7 @@ export function summarise(plan: Plan | null, input: PlanInput, stopMinutes: numb
   const evaSeconds = plan.walkTime + targets * stopMinutes * 60
   // The mission limits are judged on the planning-pace figures: EVA duration and the way back alike.
   const planEvaSeconds = plan.planWalkTime + targets * stopMinutes * 60
-  const checks = feasible ? buildChecks({ evaSeconds: planEvaSeconds, walkBack: plan.walkBack }) : null
+  const checks = feasible ? buildChecks({ evaSeconds: planEvaSeconds, walkBack: plan.walkBack, returnDistanceM: returnLimitsOf(input).distance_m }) : null
   const verdict = missionVerdict(true, feasible, checks)
   const failed = checks?.filter((c) => !c.ok) ?? []
   return {

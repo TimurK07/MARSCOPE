@@ -96,6 +96,8 @@ export interface DisplayInput {
   plan: Plan | null
   /** Checks of the selected priority; null when there is no feasible route. */
   checks: Check[] | null
+  /** The return distance limit the plan was checked against, metres. The default when left out. */
+  returnDistanceM?: number
   verdict: Verdict
 }
 
@@ -122,7 +124,7 @@ export function routeDisplay(i: DisplayInput): RouteDisplay {
     const returnFailed = failed.some((c) => c.id !== 'duration')
     // The return check knows which point of the route decided it. The EVA duration has no such place.
     if (returnFailed && back && back.reachable && Number.isFinite(back.maxDistance)) {
-      const km = RETURN_LIMITS.distance_m / 1000
+      const km = +((i.returnDistanceM ?? RETURN_LIMITS.distance_m) / 1000).toFixed(2)
       const min = RETURN_LIMITS.time_s / 60
       if (!back.verified) {
         notes.push({ kind: 'return-unverified', at: back.maxDistanceAt, label: `From this point a way back within ${km} km and ${min} min could not be verified.` })

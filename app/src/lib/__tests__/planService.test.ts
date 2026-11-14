@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { computeAllPlans, type PlanInput } from '../planner'
+import { computeAllPlans, summarise, type PlanInput } from '../planner'
 import type { WorkerReply, WorkerRequest } from '../planner.worker'
 import { PlanService, type PlanUpdate, type WorkerLike } from '../planService'
 import { at, makeTerrain } from './synthetic'
@@ -234,5 +234,101 @@ describe('planning without a usable worker', () => {
     vi.runAllTimers()
     const done = updates.find((u) => u.done)!
     for (const m of ['fastest', 'energy', 'cautious'] as const) expect(done.plans[m]!.error).not.toBeNull()
+  })
+})
+
+describe('changing the return distance limit', () => {
+  // Level ground 1.6 km long: a target 1.5 km from the habitat passes at 2 km and fails at 1.2 km.
+  const long = makeTerrain(420, 3, () => 0)
+  const withLimit = (returnDistanceM?: number): PlanInput => ({ points: [at(long, 5, 1), at(long, 380, 1)], roundTrip: true, massKg: 180, returnDistanceM })
+  const verdictOf = (u: PlanUpdate) => summarise(u.plans.fastest, u.input, 0)!.verdict
+
+  /** A worker that answers each request with what the real worker computes for that input. */
+  class LimitWorker extends FakeWorker {
+    reply(ticket: number, inp: PlanInput) {
+      const plans = computeAllPlans(long, inp)
+      const modes = ['fastest', 'energy', 'cautious'] as const
+      modes.forEach((mode, i) => this.onmessage?.({ data: { type: 'plan', ticket, mode, plan: plans[mode], done: i === modes.length - 1 } }))
+    }
+  }
+  const make = (worker: LimitWorker | null) => {
+    const updates: PlanUpdate[] = []
+    const service = new PlanService({ terrain: long, createWorker: () => worker, onUpdate: (u) => updates.push(u) })
+    return { service, updates, done: () => updates.filter((u) => u.done) }
+  }
+
+  it('sends the limit to the worker with the request', () => {
+    const w = new LimitWorker()
+    const { service } = make(w)
+    service.request(withLimit(1200), 'fastest')
+    expect(w.planRequests()[0].input.returnDistanceM).toBe(1200)
+  })
+
+  it('gives the verdict of the limit asked for', () => {
+    const w = new LimitWorker()
+    const { service, done } = make(w)
+    w.reply(service.request(withLimit(), 'fastest'), withLimit())
+    expect(verdictOf(done()[0])).toBe('go')
+    w.reply(service.request(withLimit(1200), 'fastest'), withLimit(1200))
+    expect(verdictOf(done()[1])).toBe('nogo')
+    w.reply(service.request(withLimit(2000), 'fastest'), withLimit(2000))
+    expect(verdictOf(done()[2])).toBe('go')
+  })
+
+  it('keeps only the answer for the last limit when it is changed quickly', () => {
+    const w = new LimitWorker()
+    const { service, updates, done } = make(w)
+    const limits = [2000, 1800, 1600, 1400, 1200]
+    const tickets = limits.map((m) => service.request(withLimit(m), 'fastest'))
+    // Answers arrive late and out of order; only the one for the last request may be used.
+    for (const i of [1, 0, 3, 2]) w.reply(tickets[i], withLimit(limits[i]))
+    expect(updates).toHaveLength(0)
+    w.reply(tickets[4], withLimit(1200))
+    expect(done()).toHaveLength(1)
+    expect(done()[0].input.returnDistanceM).toBe(1200)
+    expect(verdictOf(done()[0])).toBe('nogo')
+    // No update at all carried a verdict for an earlier limit.
+    expect(updates.every((u) => u.input.returnDistanceM === 1200)).toBe(true)
+  })
+
+  it('does the same on the main thread, quickly changed too', () => {
+    const { service, updates, done } = make(null)
+    for (const m of [2000, 1500, 1200]) service.request(withLimit(m), 'fastest')
+    vi.runAllTimers()
+    expect(done()).toHaveLength(1)
+    expect(done()[0].input.returnDistanceM).toBe(1200)
+    expect(updates.every((u) => u.input.returnDistanceM === 1200)).toBe(true)
+    expect(verdictOf(done()[0])).toBe('nogo')
+  })
+
+  it('gets the same plan from the worker and from the main-thread fallback, for every limit and mode', () => {
+    for (const m of [undefined, 1200, 1500, 2000, 3000]) {
+      const viaWorker = make(new LimitWorker())
+      const w = viaWorker.service as unknown as { worker: LimitWorker }
+      w.worker.reply(viaWorker.service.request(withLimit(m), 'fastest'), withLimit(m))
+      const local = make(null)
+      local.service.request(withLimit(m), 'fastest')
+      vi.runAllTimers()
+      const a = viaWorker.done()[0]
+      const b = local.done()[0]
+      for (const mode of ['fastest', 'energy', 'cautious'] as const) {
+        const sa = summarise(a.plans[mode], a.input, 20)!
+        const sb = summarise(b.plans[mode], b.input, 20)!
+        expect(sb.verdict).toBe(sa.verdict)
+        expect(b.plans[mode]!.walkBack).toEqual(a.plans[mode]!.walkBack)
+        expect(sb.checks!.map((c) => `${c.id} ${c.value} ${c.limit} ${c.ok}`)).toEqual(sa.checks!.map((c) => `${c.id} ${c.value} ${c.limit} ${c.ok}`))
+      }
+    }
+  })
+
+  it('falls back with the limit intact when the worker fails mid-request', () => {
+    const w = new LimitWorker()
+    const { service, done } = make(w)
+    service.request(withLimit(1200), 'fastest')
+    w.onerror?.(new Error('worker crashed'))
+    vi.runAllTimers()
+    expect(done()).toHaveLength(1)
+    expect(done()[0].input.returnDistanceM).toBe(1200)
+    expect(verdictOf(done()[0])).toBe('nogo')
   })
 })
