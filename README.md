@@ -70,7 +70,7 @@ Then open http://localhost:5173. Click **Load example** in the EVA plan panel to
 
 If WebGL is slow or missing, add `?view=2d` to the address to open straight in the 2D workspace (this also happens by itself when WebGL cannot start).
 
-To build a static site: `npm run build` (output in `app/dist`). To run the unit tests for the model and the route search: `npm test`.
+To build a static site: `npm run build` (output in `app/dist`). To run the tests: `npm test`. They include a comparison of the route search with an exhaustive search and safety checks on the real terrain grid.
 
 ### Rebuilding the terrain data (optional)
 
@@ -87,8 +87,9 @@ python3 -m venv .venv
 The study area is a 1024 × 1024 grid (about 4 m per cell) cut from the MRO HiRISE Gale Crater DEM. Each step between cells costs the time a suited astronaut needs to walk it:
 
 - **Walking speed vs slope** follows Marquez (2008), derived from Apollo traverse data, as implemented in the SEXTANT planner used by NASA's BASALT programme.
-- **Metabolic cost** follows Santee et al. (2001), with Mars gravity of 3.73 m/s².
-- **Slope limit of 20°**, **EVA duration of 8 hours** and **2 km walking range** come from NASA EVA-EXP-0075 (Exploration EVA System Concept of Operations).
+- **Metabolic cost** follows Santee et al. (2001), with Mars gravity of 3.73 m/s². It covers walking only; work at the targets is not modelled.
+- **Slope limit of 20°**, **EVA duration of 8 hours** and **2 km walking range** come from NASA EVA-EXP-0075 (Exploration EVA System Concept of Operations). The route never clips no-go cells diagonally, and slope is stored rounded up so the limit is strict.
+- **Walk back.** From every point of the route we compute the fastest safe way back to the habitat over the terrain. The plan must keep the longest of these within 2 km and the slowest within 60 minutes. The 60 minutes is our reading of the same NASA document, not a NASA requirement.
 - **Radiation**: 0.67 mSv/day, the average galactic cosmic ray dose equivalent Curiosity's RAD measured in Gale crater (Hassler et al., 2014), compared with the 600 mSv career limit of NASA-STD-3001.
 
 The suited mass and the time spent at each target are planning inputs the user sets. Links to every source are in the app and in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).

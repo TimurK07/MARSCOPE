@@ -84,9 +84,22 @@ class MinHeap {
   }
 }
 
-function isBlocked(t: Terrain, idx: number): boolean {
+/** A cell can be walked on when it has terrain data and its slope is within the limit. */
+export function isWalkable(t: Terrain, idx: number): boolean {
   const s = slopeAt(t, idx)
-  return Number.isNaN(s) || s > MAX_SLOPE_DEG
+  return !Number.isNaN(s) && s <= MAX_SLOPE_DEG
+}
+
+const isBlocked = (t: Terrain, idx: number) => !isWalkable(t, idx)
+
+/**
+ * Whether a step between neighbouring cells is allowed.
+ * A diagonal step passes the corner shared by two other cells; if either of
+ * them is blocked, the step would clip no-go terrain, so it is refused.
+ */
+function canStep(t: Terrain, x: number, y: number, k: number): boolean {
+  if (DX[k] === 0 || DY[k] === 0) return true
+  return isWalkable(t, y * t.width + (x + DX[k])) && isWalkable(t, (y + DY[k]) * t.width + x)
 }
 
 export function findLeg(t: Terrain, from: LatLon, to: LatLon): LegResult {
@@ -131,7 +144,7 @@ export function findLeg(t: Terrain, from: LatLon, to: LatLon): LegResult {
       const ny = y + DY[k]
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
       const n = ny * w + nx
-      if (closed[n] || isBlocked(t, n)) continue
+      if (closed[n] || isBlocked(t, n) || !canStep(t, x, y, k)) continue
       const d = stepLen[k]
       const grade = (Math.atan2(elevationAt(t, n) - zCur, d) * 180) / Math.PI
       const speed = walkingSpeedMs(grade)
@@ -194,4 +207,104 @@ function buildLeg(t: Terrain, cells: number[]): RouteLeg {
     samples.push({ ...cellCenter(t, idx), dist, elevation: z, grade, slope, time })
   }
   return { samples, distance: dist, duration: time, ascent, descent, maxSlope, energyPerKg, energyFixed }
+}
+
+export interface WalkBack {
+  /** Longest time needed to walk back to the habitat from any point of the route, seconds. */
+  maxTime: number
+  /** Where on the route that is. */
+  maxTimeAt: LatLon
+  /** Longest walk-back path from any point of the route, metres. */
+  maxDistance: number
+  maxDistanceAt: LatLon
+  /** False when some point of the route has no safe way back. */
+  reachable: boolean
+}
+
+/**
+ * Worst-case walk back to the habitat from anywhere on a route.
+ *
+ * For every cell it finds the fastest safe way to the habitat over the terrain,
+ * with the same rules and walking model as the route search. Costs depend on
+ * direction (climbing is slower than descending), so this is computed towards
+ * the habitat and is not the outbound time reversed.
+ */
+export function walkBack(t: Terrain, habitat: LatLon, route: LatLon[]): WalkBack | null {
+  const home = cellAt(t, habitat)
+  if (home < 0 || isBlocked(t, home) || route.length === 0) return null
+  const w = t.width
+  const h = t.height
+  const cx = t.meta.cellSizeX_m
+  const cy = t.meta.cellSizeY_m
+  const stepLen = DX.map((dx, k) => Math.hypot(dx * cx, DY[k] * cy))
+
+  // Cells of the route still waiting for their answer; the search stops when none are left.
+  const wanted = new Uint8Array(w * h)
+  let pending = 0
+  const cells: number[] = []
+  for (const p of route) {
+    const c = cellAt(t, p)
+    cells.push(c)
+    if (c >= 0 && !wanted[c]) {
+      wanted[c] = 1
+      pending++
+    }
+  }
+
+  const time = new Float32Array(w * h).fill(Infinity)
+  const dist = new Float32Array(w * h).fill(Infinity)
+  const closed = new Uint8Array(w * h)
+  const heap = new MinHeap()
+  time[home] = 0
+  dist[home] = 0
+  heap.push(home, 0)
+
+  // Dijkstra outwards from the habitat over reversed steps: when cell v is settled,
+  // each neighbour u is offered the cost of walking u -> v.
+  while (heap.size > 0 && pending > 0) {
+    const v = heap.pop()
+    if (closed[v]) continue
+    closed[v] = 1
+    if (wanted[v]) pending--
+    const x = v % w
+    const y = (v - x) / w
+    const zv = elevationAt(t, v)
+    for (let k = 0; k < 8; k++) {
+      const ux = x + DX[k]
+      const uy = y + DY[k]
+      if (ux < 0 || uy < 0 || ux >= w || uy >= h) continue
+      const u = uy * w + ux
+      if (closed[u] || isBlocked(t, u) || !canStep(t, x, y, k)) continue
+      const d = stepLen[k]
+      const dz = zv - elevationAt(t, u)
+      const speed = walkingSpeedMs((Math.atan2(dz, d) * 180) / Math.PI)
+      const cand = time[v] + d / speed
+      if (cand < time[u]) {
+        time[u] = cand
+        dist[u] = dist[v] + Math.hypot(d, dz)
+        heap.push(u, cand)
+      }
+    }
+  }
+
+  let maxTime = 0
+  let maxDistance = 0
+  let maxTimeAt = route[0]
+  let maxDistanceAt = route[0]
+  let reachable = true
+  cells.forEach((c, i) => {
+    if (c < 0 || !closed[c]) {
+      reachable = false
+      return
+    }
+    if (time[c] > maxTime) {
+      maxTime = time[c]
+      maxTimeAt = route[i]
+    }
+    if (dist[c] > maxDistance) {
+      maxDistance = dist[c]
+      maxDistanceAt = route[i]
+    }
+  })
+  return { maxTime, maxTimeAt, maxDistance, maxDistanceAt, reachable }
 }

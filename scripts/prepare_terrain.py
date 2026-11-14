@@ -9,7 +9,7 @@ Usage:
 
 Outputs (app/public/data/gale/):
     elevation.bin  uint16 little-endian, value = (elevation_m - elev_min) / elev_scale
-    slope.bin      uint8, value = slope_deg / slope_scale (255 = no data)
+    slope_cdeg.bin uint16 little-endian, value = ceil(slope_deg / slope_scale) (65535 = no data)
     meta.json      grid geometry, scales and provenance
 """
 
@@ -38,8 +38,10 @@ SIZE = 1024  # pixels per side
 
 MARS_RADIUS_M = 3_396_190.0  # Mars 2000 sphere (IAU), same as the DEM's CRS 104905
 ELEV_SCALE = 0.1  # metres per uint16 step
-SLOPE_SCALE = 0.5  # degrees per uint8 step
-SLOPE_NODATA = 255
+# Slope is stored rounded UP to the next step, so a stored value is never below the
+# true slope: a cell just over the 20 degree limit can never be read as walkable.
+SLOPE_SCALE = 0.01  # degrees per uint16 step
+SLOPE_NODATA = 65535
 
 
 def download_dem(path: Path) -> str:
@@ -92,12 +94,18 @@ def main() -> None:
     )
 
     elev_u16 = np.clip(np.round((filled - elev_min) / ELEV_SCALE), 0, 65535).astype("<u2")
-    slope_u8 = np.clip(np.round(slope_deg / SLOPE_SCALE), 0, 254).astype(np.uint8)
-    slope_u8[~valid] = SLOPE_NODATA
+    slope_u16 = np.minimum(np.ceil(slope_deg / SLOPE_SCALE - 1e-9), SLOPE_NODATA - 1).astype("<u2")
+    slope_u16[~valid] = SLOPE_NODATA
+    # The encoding must be conservative everywhere there is data.
+    assert np.all(slope_u16[valid] * SLOPE_SCALE >= slope_deg[valid] - 1e-6)
+    above = int(((slope_deg > 20.0) & valid).sum())
+    read_above = int(((slope_u16 * SLOPE_SCALE > 20.0) & valid).sum())
+    assert read_above >= above
+    print(f"cells above 20 deg: {above} true, {read_above} as stored")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     elev_u16.tofile(OUT_DIR / "elevation.bin")
-    slope_u8.tofile(OUT_DIR / "slope.bin")
+    slope_u16.tofile(OUT_DIR / "slope_cdeg.bin")
 
     meta = {
         "name": "Mount Sharp study area, Gale crater",
@@ -114,8 +122,8 @@ def main() -> None:
             "scale_m": ELEV_SCALE,
         },
         "slope": {
-            "file": "slope.bin",
-            "dtype": "uint8",
+            "file": "slope_cdeg.bin",
+            "dtype": "uint16-le",
             "scale_deg": SLOPE_SCALE,
             "nodata": SLOPE_NODATA,
         },

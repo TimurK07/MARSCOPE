@@ -59,8 +59,18 @@ export function segmentEnergy(distM: number, gradeDeg: number, speedMs: number):
 export const EVA = {
   /** "Supports EVAs of up to 8 hours in duration (6±2 hours)". */
   maxDuration_h: 8,
-  /** Walking EVAs stay within a 2 km radius of the lander/habitat. */
+  /**
+   * Walking EVAs stay within 2 km of the lander/habitat. The document states this
+   * as a radius. We apply it to the length of the actual walk-back path, which is
+   * never shorter than the straight line, so this is the stricter reading.
+   */
   walkRadius_km: 2,
+  /**
+   * Walk-back time limit, minutes. This is our reading, not a NASA requirement:
+   * the same document plans walking EVAs within 2 km at about 2 km/h, i.e. about
+   * one hour to walk back, and gives one hour of secondary oxygen on the suit.
+   */
+  walkBackTime_min: 60,
 }
 
 export const RADIATION = {

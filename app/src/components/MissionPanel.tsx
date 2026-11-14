@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adviceFor } from '../lib/advice'
+import { buildChecks } from '../lib/mission'
 import { EVA, MAX_SLOPE_DEG, RADIATION } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
 import { Datum, Icon, Section } from './ui'
@@ -73,7 +74,7 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
           <dd>{ready ? `+${Math.round(plan.ascent)} / −${Math.round(plan.descent)} m` : '—'}</dd>
         </div>
         <div>
-          <dt>Energy</dt>
+          <dt>Walking energy</dt>
           <dd>{ready ? `${Math.round(s.energyKcal)} kcal` : '—'}</dd>
         </div>
       </dl>
@@ -94,16 +95,11 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
     if (verdict === 'nogo') setConstraintsOpen(true)
   }, [verdict])
 
-  const ratios: Record<string, number> = ready
-    ? {
-        duration: s.evaSeconds / (EVA.maxDuration_h * 3600),
-        range: plan.farthest / (EVA.walkRadius_km * 1000),
-        slope: plan.maxSlope / MAX_SLOPE_DEG,
-      }
-    : {}
   const adviceInput = ready
-    ? { points, walkTime: plan.walkTime, stopMinutes: s.stopMinutes, farthest: plan.farthest }
+    ? { points, walkTime: plan.walkTime, stopMinutes: s.stopMinutes, walkBack: plan.walkBack }
     : null
+  // With no route yet, show the limits the plan will be held to.
+  const idleChecks = buildChecks({ evaSeconds: 0, walkBack: null }).map((c) => ({ ...c, value: '—', ok: true, ratio: 0, margin: '' }))
   const targets = Math.max(points.length - 1, 0)
 
   return (
@@ -240,14 +236,19 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
         onToggle={setConstraintsOpen}
         aside={checks ? `${checks.length - failed.length} of ${checks.length} met` : undefined}
       >
+        <p className={`feasible ${verdict === 'noroute' ? 'is-bad' : ready ? 'is-ok' : ''}`}>
+          <b>Route feasibility</b>
+          <span>
+            {verdict === 'noroute'
+              ? 'No safe route. Mission constraints are not assessed.'
+              : ready
+                ? `Every leg stays on ground of ${MAX_SLOPE_DEG}° or less.`
+                : `Legs must stay on ground of ${MAX_SLOPE_DEG}° or less.`}
+          </span>
+        </p>
         <ul className="limits">
-          {(checks ?? [
-            { id: 'duration', label: 'EVA duration', value: '—', limit: `≤ ${EVA.maxDuration_h} h`, ok: true },
-            { id: 'range', label: 'Farthest point from habitat', value: '—', limit: `≤ ${EVA.walkRadius_km} km`, ok: true },
-            { id: 'slope', label: 'Steepest terrain on route', value: '—', limit: `≤ ${MAX_SLOPE_DEG}°`, ok: true },
-          ]).map((c) => {
-            const advice = !c.ok && adviceInput ? adviceFor(c.id, adviceInput) : null
-            const ratio = ratios[c.id]
+          {(checks ?? idleChecks).map((c) => {
+            const advice = checks && !c.ok && adviceInput ? adviceFor(c.id, adviceInput) : null
             return (
               <li key={c.id} className={!checks ? 'idle' : c.ok ? 'ok' : 'bad'}>
                 <div className="limit-row">
@@ -257,14 +258,20 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
                   </code>
                 </div>
                 <div className="limit-bar" aria-hidden="true">
-                  <i style={{ width: `${Math.min(ratio ?? 0, 1) * 100}%` }} />
+                  <i style={{ width: `${Math.min(c.ratio, 1) * 100}%` }} />
                 </div>
+                {checks && <p className="limit-margin">{c.margin}</p>}
                 {advice && <p className="limit-advice">{advice}</p>}
               </li>
             )
           })}
         </ul>
-        <p className="footnote">Limits from NASA EVA-EXP-0075, Exploration EVA System Concept of Operations.</p>
+        <p className="footnote">
+          Duration and the 2 km walking range are from NASA EVA-EXP-0075. We apply the range to the actual walk-back
+          path. The {EVA.walkBackTime_min} min walk-back time is our reading of the same document (2 km at about 2 km/h,
+          one hour of secondary oxygen), not a NASA requirement. Walking back is computed over the terrain towards the
+          habitat, so a climb home counts as slower than the walk out.
+        </p>
       </Section>
 
       <Section title="Route telemetry" defaultOpen={false}>
@@ -273,13 +280,20 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
             <Datum label="Walking time">{fmtDur(plan.walkTime)}</Datum>
             <Datum label="Time at targets">{fmtDur(targets * s.stopMinutes * 60)}</Datum>
             <Datum label="Mean walking speed">{(plan.distance / plan.walkTime).toFixed(2)} m/s</Datum>
-            <Datum label="Steepest terrain">{plan.maxSlope.toFixed(1)}°</Datum>
-            <Datum label="Farthest from habitat">{fmtKm(plan.farthest)}</Datum>
+            <Datum label="Steepest terrain on route">
+              {plan.maxSlope.toFixed(1)}° of {MAX_SLOPE_DEG}°
+            </Datum>
+            <Datum label="Farthest point, straight line">{fmtKm(plan.farthest)}</Datum>
+            <Datum label="Walking energy">{Math.round(s.energyKcal)} kcal</Datum>
             <Datum label="Route legs">{plan.legs.length}</Datum>
           </dl>
         ) : (
           <p className="muted">Available once a route is planned.</p>
         )}
+        <p className="footnote">
+          Energy covers walking only (Santee et al. 2001). Work at the targets is not modelled, so this is not the
+          energy of the whole EVA.
+        </p>
       </Section>
 
       <Section title="Radiation exposure" defaultOpen={false} aside={ready ? `${s.doseMsv.toFixed(3)} mSv` : undefined}>

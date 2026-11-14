@@ -9,7 +9,8 @@ export interface TerrainMeta {
   cellSizeX_m: number
   cellSizeY_m: number
   elevation: { file: string; min_m: number; max_m: number; scale_m: number }
-  slope: { file: string; scale_deg: number; nodata: number }
+  /** Slope is stored rounded up, so a stored value is never below the true slope. */
+  slope: { file: string; dtype: string; scale_deg: number; nodata: number }
   source: { dataset: string; provider: string; url: string; retrieved: string }
 }
 
@@ -18,7 +19,7 @@ export interface Terrain {
   width: number
   height: number
   elevRaw: Uint16Array
-  slopeRaw: Uint8Array
+  slopeRaw: Uint16Array
 }
 
 export interface LatLon {
@@ -39,7 +40,7 @@ export async function loadTerrain(): Promise<Terrain> {
     width: meta.width,
     height: meta.height,
     elevRaw: new Uint16Array(elevBuf),
-    slopeRaw: new Uint8Array(slopeBuf),
+    slopeRaw: new Uint16Array(slopeBuf),
   }
 }
 

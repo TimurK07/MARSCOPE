@@ -18,10 +18,10 @@
     "scale_m": 0.1
   },
   "slope": {
-    "file": "slope.bin",
-    "dtype": "uint8",
-    "scale_deg": 0.5,
-    "nodata": 255
+    "file": "slope_cdeg.bin",
+    "dtype": "uint16-le",
+    "scale_deg": 0.01,
+    "nodata": 65535
   },
   "crs": "Mars 2000 sphere (ESRI:104905), planetocentric lat, east-positive lon",
   "source": {

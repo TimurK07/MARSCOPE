@@ -115,13 +115,22 @@ We could not open the USGS copyright policy page from our environment, so the us
 |---|---|---|
 | Max traversable slope | 20° | NASA EVA-EXP-0075: https://www.nasa.gov/wp-content/uploads/2020/01/topic_1-_eva_lunar_surface_concept_of_operations.pdf |
 | Max EVA duration | 8 h ("6±2 hours") | NASA EVA-EXP-0075 (same document) |
-| Walking range from habitat | 2 km radius | NASA EVA-EXP-0075 (same document) |
+| Walking range from habitat | 2 km | NASA EVA-EXP-0075 (same document). The document gives a radius; we apply it to the length of the walk-back path over the terrain, which is the stricter reading |
+| Walk-back time limit | 60 min | **Our reading, not a NASA requirement.** Derived from the same document: walking EVAs within 2 km at about 2 km/h, and one hour of secondary oxygen on the suit |
 | Walking speed vs slope | piecewise, max 1.6 m/s | Marquez (2008), as implemented in SEXTANT: https://github.com/norheim/pextant/blob/master/pextant/explorers.py |
 | Metabolic cost | level + slope terms | Santee et al. (2001), as implemented in SEXTANT (same file) |
 | Surface GCR dose equivalent | 0.67 mSv/day | Curiosity RAD, Hassler et al. (2014): https://www.swri.org/press-release/swri-scientists-publish-first-radiation-measurements-surface-mars |
 | Solar storm, 20 May 2024 | 8,100 µGy | NASA JPL: https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm/ |
 | Career radiation limit | 600 mSv | NASA-STD-3001 Vol 1 Rev B [V1 4030]: https://www.nasa.gov/wp-content/uploads/2020/10/2022-01-05_nasa-std-3001_vol.1_rev._b_final_draft_with_signature_010522.pdf |
 | Mars surface gravity | 3.73 m/s² | NASA NSSDC Mars Fact Sheet: https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html |
+
+### How the planner uses these
+
+- **Hard limit.** A cell is walkable only if its slope is 20° or less. Slope is stored in steps of 0.01°, rounded up, so a stored value is never below the true slope. Cells without terrain data are not walkable.
+- **No corner cutting.** A diagonal step is refused when either of the two cells it passes between is not walkable.
+- **Walk back.** For every point of a route we compute the fastest safe way to the habitat over the terrain, with the same walking model. Climbing is slower than descending, so this is computed towards the habitat and is not the outbound time reversed. The mission checks use the longest and the slowest of these.
+- **Feasibility comes first.** GO / NO-GO is assessed only for a route that exists. A plan with an unreachable checkpoint is NO ROUTE.
+- **Energy is walking energy.** Work at the targets is not modelled.
 
 Note: we read the walking-speed and metabolic formulas in the open-source SEXTANT code, which attributes them to Marquez (2008) and Santee et al. (2001). We did not read the original papers directly.
 

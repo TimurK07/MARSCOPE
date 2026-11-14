@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { EVA, MAX_SLOPE_DEG, RADIATION, surfaceDistanceM } from '../lib/model'
-import { findLeg, type LegResult, type RouteLeg, type RouteSample } from '../lib/router'
+import { buildChecks, type Check } from '../lib/mission'
+import { RADIATION, surfaceDistanceM } from '../lib/model'
+import { findLeg, walkBack, type LegResult, type RouteLeg, type RouteSample, type WalkBack } from '../lib/router'
 import type { LatLon, Terrain } from '../lib/terrain'
 
 export interface Plan {
@@ -15,25 +16,15 @@ export interface Plan {
   maxSlope: number
   energyPerKg: number
   energyFixed: number
+  /** Farthest point of the route from the habitat in a straight line, metres. For information only. */
   farthest: number
+  /** Worst-case walk back to the habitat from anywhere on the route. */
+  walkBack: WalkBack | null
 }
 
-export interface Check {
-  id: string
-  label: string
-  value: string
-  limit: string
-  ok: boolean
-}
+export type { Check } from '../lib/mission'
 
-export const fmtKm = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`)
-export const fmtDur = (s: number) => {
-  const m = Math.round(s / 60)
-  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`
-}
-export const fmtLat = (lat: number) => `${Math.abs(lat).toFixed(4)}°${lat < 0 ? 'S' : 'N'}`
-export const fmtLon = (lon: number) => `${lon.toFixed(4)}°E`
-export const fmtCoord = (p: LatLon) => `${fmtLat(p.lat)} ${fmtLon(p.lon)}`
+export { fmtCoord, fmtDur, fmtKm, fmtLat, fmtLon } from '../lib/format'
 
 const HISTORY_LIMIT = 50
 
@@ -108,41 +99,18 @@ export function usePlan(terrain: Terrain | null) {
       energyPerKg: legs.reduce((a, l) => a + l.energyPerKg, 0),
       energyFixed: legs.reduce((a, l) => a + l.energyFixed, 0),
       farthest,
+      // Only a complete, feasible route is assessed for the way back.
+      walkBack: error ? null : walkBack(terrain, points[0], samples),
     }
   }, [terrain, points, roundTrip])
 
   const targets = Math.max(points.length - 1, 0)
   const evaSeconds = plan ? plan.walkTime + targets * stopMinutes * 60 : 0
-  const evaHours = evaSeconds / 3600
   const doseMsv = (RADIATION.doseEquivalent_mSv_per_day * evaSeconds) / 86400
   const energyKcal = plan ? (plan.energyPerKg * massKg + plan.energyFixed) / 4184 : 0
 
-  const checks: Check[] | null =
-    plan && !plan.error
-      ? [
-          {
-            id: 'duration',
-            label: 'EVA duration',
-            value: fmtDur(evaSeconds),
-            limit: `≤ ${EVA.maxDuration_h} h`,
-            ok: evaHours <= EVA.maxDuration_h,
-          },
-          {
-            id: 'range',
-            label: 'Farthest point from habitat',
-            value: fmtKm(plan.farthest),
-            limit: `≤ ${EVA.walkRadius_km} km`,
-            ok: plan.farthest / 1000 <= EVA.walkRadius_km,
-          },
-          {
-            id: 'slope',
-            label: 'Steepest terrain on route',
-            value: `${plan.maxSlope.toFixed(1)}°`,
-            limit: `≤ ${MAX_SLOPE_DEG}°`,
-            ok: plan.maxSlope <= MAX_SLOPE_DEG,
-          },
-        ]
-      : null
+  // Mission-level checks apply only to a feasible route.
+  const checks: Check[] | null = plan && !plan.error ? buildChecks({ evaSeconds, walkBack: plan.walkBack }) : null
   const go = checks ? checks.every((c) => c.ok) : false
 
   return {
