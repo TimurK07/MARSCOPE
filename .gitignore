@@ -27,3 +27,7 @@ data/raw/
 # Editors
 .vscode/
 .idea/
+.gstack/
+
+# Local tool config
+.claude/

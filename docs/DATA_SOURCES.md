@@ -38,7 +38,8 @@ Coordinates: we normalise everything to **planetocentric latitude, longitude −
 | THEMIS night IR mosaic | `THEMIS_NightIR_ControlledMosaics_100m_v2_oct2018` | png | 9 | ±65° lat |
 | TES thermal inertia | `TES_Thermal_Inertia` | png | 1 | global |
 | **MRO CTX mosaic, Gale crater** | `Gale_CTX_BlockAdj_dd` | — | 12 | 135.18–139.24°E, 6.57–2.81°S |
-| **MRO HiRISE DEM, Gale crater (1 m)** | `Gale_DEM_SMG_1m` | — | 14 | 137.12–137.73°E, 4.93–4.25°S |
+| **MRO HiRISE mosaic, Curiosity roving site** | `curiosity_hirise_mosaic` | png | 16 | 137.12–137.73°E, 4.93–4.25°S |
+| **MRO HiRISE DEM, Gale crater (1 m)** | `Gale_DEM_SMG_1m` | png | 14 | 137.12–137.73°E, 4.93–4.25°S |
 | MRO CTX mosaic, Jezero (controlled) | `JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0` | — | — | Jezero |
 | MRO HiRISE mosaic, Jezero (25 cm) | `JEZ_hirise_soc_006_orthoMosaic_25cm_Eqc_latTs0_lon0_first_dd` | — | 17 | 77.22–77.58°E, 18.31–18.67°N |
 
@@ -93,6 +94,22 @@ Coordinates: we normalise everything to **planetocentric latitude, longitude −
 | Human landing sites | Exploration Zones (NASA EMC), Mars Trek | https://trek.nasa.gov/mars/trekarcgis/rest/services/EZMars/MapServer/2/query?where=1%3D1&outFields=*&outSR=4326&f=geojson | GeoJSON, 51 features ✅ |
 | Past landing sites | PDS ODE landing sites | https://ode.rsl.wustl.edu/mars/pagehelp/Content/Missions_Instruments/Landing_Sites.htm | table |
 | Place names | IAU/USGS Gazetteer of Planetary Nomenclature | https://asc-planetarynames-data.s3.us-west-2.amazonaws.com/MARS_nomenclature_center_pts.zip | shapefile, 5.4 MB, 0–360°E |
+
+## 5. Model constants
+
+| Constant | Value | Source |
+|---|---|---|
+| Max traversable slope | 20° | NASA EVA-EXP-0075: https://www.nasa.gov/wp-content/uploads/2020/01/topic_1-_eva_lunar_surface_concept_of_operations.pdf |
+| Max EVA duration | 8 h ("6±2 hours") | NASA EVA-EXP-0075 (same document) |
+| Walking range from habitat | 2 km radius | NASA EVA-EXP-0075 (same document) |
+| Walking speed vs slope | piecewise, max 1.6 m/s | Marquez (2008), as implemented in SEXTANT: https://github.com/norheim/pextant/blob/master/pextant/explorers.py |
+| Metabolic cost | level + slope terms | Santee et al. (2001), as implemented in SEXTANT (same file) |
+| Surface GCR dose equivalent | 0.67 mSv/day | Curiosity RAD, Hassler et al. (2014): https://www.swri.org/press-release/swri-scientists-publish-first-radiation-measurements-surface-mars |
+| Solar storm, 20 May 2024 | 8,100 µGy | NASA JPL: https://www.jpl.nasa.gov/news/nasa-watches-mars-light-up-during-epic-solar-storm/ |
+| Career radiation limit | 600 mSv | NASA-STD-3001 Vol 1 Rev B [V1 4030]: https://www.nasa.gov/wp-content/uploads/2020/10/2022-01-05_nasa-std-3001_vol.1_rev._b_final_draft_with_signature_010522.pdf |
+| Mars surface gravity | 3.73 m/s² | NASA NSSDC Mars Fact Sheet: https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html |
+
+Note: we read the walking-speed and metabolic formulas in the open-source SEXTANT code, which attributes them to Marquez (2008) and Santee et al. (2001). We did not read the original papers directly.
 
 ## Not used / unverified
 

@@ -1,0 +1,33 @@
+{
+  "name": "Mount Sharp study area, Gale crater",
+  "bbox": {
+    "west": 137.355,
+    "south": -4.86,
+    "east": 137.425,
+    "north": -4.79
+  },
+  "width": 1024,
+  "height": 1024,
+  "cellSizeX_m": 4.0376220796985125,
+  "cellSizeY_m": 4.051981276007277,
+  "elevation": {
+    "file": "elevation.bin",
+    "dtype": "uint16-le",
+    "min_m": -3865.4501953125,
+    "max_m": -2941.903564453125,
+    "scale_m": 0.1
+  },
+  "slope": {
+    "file": "slope.bin",
+    "dtype": "uint8",
+    "scale_deg": 0.5,
+    "nodata": 255
+  },
+  "crs": "Mars 2000 sphere (ESRI:104905), planetocentric lat, east-positive lon",
+  "source": {
+    "dataset": "MRO HiRISE, Gale Crater DEM (Gale_DEM_SMG_1m), 1 m/px",
+    "provider": "NASA JPL Mars Trek",
+    "url": "https://trek.nasa.gov/mars/trekarcgis/rest/services/Gale_DEM_SMG_1m/ImageServer/exportImage?bbox=137.355%2C-4.86%2C137.425%2C-4.79&bboxSR=104905&size=1024%2C1024&format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image",
+    "retrieved": "2026-11-14"
+  }
+}
