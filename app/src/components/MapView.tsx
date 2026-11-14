@@ -22,6 +22,7 @@ export interface MapHandle {
   zoomOut: () => void
   fitSite: () => void
   fitCrater: () => void
+  reveal: (p: LatLon, bottomInset?: number) => void
 }
 
 interface Props {
@@ -89,6 +90,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   const inspectRef = useRef<L.Marker | null>(null)
   const cursorRef = useRef<L.CircleMarker | null>(null)
   const zoomRef = useRef(13)
+  const autoFit = useRef(true)
   const cb = useRef(props)
   cb.current = props
 
@@ -98,14 +100,29 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
   }
 
   useImperativeHandle(ref, () => ({
-    zoomIn: () => mapRef.current?.zoomIn(),
-    zoomOut: () => mapRef.current?.zoomOut(),
-    fitSite: () => mapRef.current?.flyToBounds(siteBounds(), { padding: [24, 24], duration: 0.6 }),
-    fitCrater: () =>
+    zoomIn: () => {
+      autoFit.current = false
+      mapRef.current?.zoomIn()
+    },
+    zoomOut: () => {
+      autoFit.current = false
+      mapRef.current?.zoomOut()
+    },
+    fitSite: () => {
+      autoFit.current = true
+      mapRef.current?.flyToBounds(siteBounds(), { padding: [24, 24], duration: 0.6 })
+    },
+    fitCrater: () => {
+      autoFit.current = false
       mapRef.current?.flyToBounds(
         L.latLngBounds([CRATER_VIEW[0], CRATER_VIEW[1]], [CRATER_VIEW[2], CRATER_VIEW[3]]),
         { duration: 0.6 },
-      ),
+      )
+    },
+    /** Pan just enough to bring a point into the visible part of the map. */
+    reveal: (p: LatLon, bottomInset = 0) => {
+      mapRef.current?.panInside([p.lat, p.lon], { paddingTopLeft: [40, 40], paddingBottomRight: [40, 40 + bottomInset] })
+    },
   }))
 
   // Create the map once.
@@ -160,19 +177,17 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     cb.current.onZoom(map.getZoom())
 
     // Keep the view sensible when the layout changes (panels, mobile tabs).
-    // Until the user moves the map, refit so the study area fills the stage.
-    let autoFit = true
-    map.on('mousedown touchstart wheel', () => (autoFit = false))
-    map.on('zoomstart', () => {
-      if (!fitting) autoFit = false
-    })
-    let fitting = false
+    // While the view is "following" the study area (initially, and after Fit),
+    // refit whenever the stage changes size: dock, panels, window.
+    autoFit.current = true
+    const stopFollowing = () => (autoFit.current = false)
+    const container = map.getContainer()
+    for (const ev of ['mousedown', 'touchstart', 'wheel'] as const) {
+      container.addEventListener(ev, stopFollowing, { passive: true })
+    }
     const ro = new ResizeObserver(() => {
-      map.invalidateSize()
-      if (!autoFit) return
-      fitting = true
-      map.fitBounds(area, { padding: [24, 24], animate: false })
-      fitting = false
+      map.invalidateSize({ animate: false })
+      if (autoFit.current) map.fitBounds(area, { padding: [24, 24], animate: false })
     })
     ro.observe(el.current!)
     return () => {

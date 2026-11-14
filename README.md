@@ -10,15 +10,20 @@ Built for the **NASA Space Apps Challenge 2026**, challenge *Interplanetary Surv
 
 MARSCOPE plans a surface EVA ("Marswalk") on Mount Sharp in Gale crater, the area Curiosity is exploring right now.
 
-- **Mission map.** HiRISE, CTX and Viking imagery of the site, with the planned route, Curiosity's traverse and the crew's checkpoints drawn on top.
-- **Scientific data layers**, grouped as imagery, terrain, environmental and scientific context. Each has a description, a legend, a switch and an opacity control.
+The interface is a map-first workspace: a tool rail on the left, the map in the centre with a dock underneath, and the mission panel on the right.
+
+- **Mission map.** HiRISE, CTX and Viking imagery of the site, with the planned route, Curiosity's traverse and the crew's checkpoints drawn on top. The map takes about three quarters of the screen.
+- **Tool rail and data panes.** Map layers, environment, scientific context and sources open as panes over the map. Each layer has a description, a legend, a switch and an opacity control.
 - **Slope hazard layer.** We compute slope from the 1 m DEM. By default only ground that restricts walking is drawn (steep as a tint, no-go as a hatch), so the imagery stays readable.
 - **Elevation tint and contours**, painted in the browser from the same DEM.
 - **Scale-aware regional layers.** THEMIS thermal infrared (100 m/px) and the USGS global geologic map (1:20M) are too coarse for a 4 km site, so the app hides them at site scale and offers a Gale crater view where they read correctly.
-- **Point inspector.** Click anywhere to read coordinates, elevation, slope class and geologic unit, then set the habitat or add a science target from there.
+- **Bottom dock** with three tabs. It can be resized, expanded and collapsed.
+  - **Terrain profile**: the elevation profile of the route, coloured by slope class and linked to the map.
+  - **Point**: click anywhere to read coordinates, elevation, slope class and geologic unit, then set the habitat or add a science target.
+  - **Surface view**: the Navcam frames Curiosity took at a selected stop, with local solar time and camera azimuth.
 - **Safe route planner.** The fastest walking route that never crosses terrain steeper than NASA's 20° limit. Checkpoints can be dragged, reordered and removed, with undo.
-- **Mission verdict.** GO or NO-GO against EVA duration, distance from the habitat and steepest slope, plus distance, time, climb, metabolic energy, radiation dose and a terrain profile linked to the map.
-- **Surface view.** Select a Curiosity stop to see the Navcam frames taken there, with local solar time and camera azimuth.
+- **Mission status.** STANDBY, GO, NO-GO or NO ROUTE, always visible with distance, EVA duration, climb and energy. On NO-GO the panel names the failed constraint and says what would fix it, for example the longest stop time that still fits the 8-hour limit.
+- **Mobile.** A full-screen map with a bottom sheet that snaps to three heights.
 - **Conditions at Gale.** The latest weather report from Curiosity's REMS station.
 
 ## Project structure
@@ -28,8 +33,10 @@ app/                 Web app (Vite + React + TypeScript + Leaflet), no backend
   src/lib/model.ts   Physical model: every constant with its source
   src/lib/router.ts  A* least-time route search over the terrain grid
   src/lib/overlays.ts Slope hazard, elevation tint and contour rasters
-  src/components/    Map, data panel, mission panel, inspector, surface view
+  src/lib/advice.ts  Plain-language guidance for a NO-GO plan
+  src/components/    Map, tool rail, data panes, dock, mission panel, mobile sheet
   src/hooks/usePlan.ts Checkpoints with undo, route and go/no-go checks
+  src/styles/        Design tokens and styles by workspace area
   public/data/gale/  Terrain grids produced by the script below
 scripts/
   prepare_terrain.py Downloads the DEM patch from NASA Mars Trek and computes slope

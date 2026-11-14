@@ -1,0 +1,173 @@
+/* Leaflet map and everything drawn on it */
+
+.map {
+  position: absolute;
+  inset: 0;
+  /* Keep Leaflet's internal z-indexes below the workspace chrome. */
+  z-index: 0;
+  isolation: isolate;
+  background: #060607;
+  cursor: crosshair;
+}
+.leaflet-container {
+  font-family: var(--font);
+  background: #060607;
+}
+.leaflet-control-attribution {
+  background: rgb(11 12 14 / 0.75) !important;
+  color: var(--text-3) !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+}
+.leaflet-control-scale-line {
+  background: rgb(11 12 14 / 0.75) !important;
+  color: var(--text) !important;
+  border-color: var(--text-2) !important;
+  font-family: var(--mono);
+  font-size: 10px !important;
+  text-shadow: none !important;
+}
+.leaflet-tooltip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  box-shadow: none;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  padding: 3px 7px;
+}
+.leaflet-tooltip::before {
+  display: none;
+}
+
+.raster {
+  image-rendering: pixelated;
+}
+.raster-elevation {
+  image-rendering: auto;
+  mix-blend-mode: multiply;
+}
+
+.site-frame {
+  stroke: var(--accent-hi);
+  stroke-width: 1;
+  stroke-dasharray: 2 5;
+  stroke-opacity: 0.8;
+}
+.rover-track {
+  stroke: var(--rover);
+  stroke-width: 1.5;
+  stroke-opacity: 0.85;
+  stroke-dasharray: 5 4;
+  fill: none;
+}
+.rover-stop {
+  stroke: #17130a;
+  stroke-width: 1;
+  fill: var(--rover);
+  fill-opacity: 1;
+  cursor: pointer;
+}
+.rover-stop.is-selected {
+  stroke: #fff;
+  stroke-width: 2;
+}
+.route-casing {
+  stroke: #05181c;
+  stroke-width: 7;
+  stroke-opacity: 0.7;
+  stroke-linejoin: round;
+  fill: none;
+}
+.route-line {
+  stroke: var(--route);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  fill: none;
+}
+.profile-cursor {
+  stroke: #05181c;
+  stroke-width: 2;
+  fill: #fff;
+  fill-opacity: 1;
+}
+
+.mk {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+.mk-base span,
+.mk-target span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  font: 700 12px var(--mono);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.6);
+  cursor: grab;
+}
+.mk-base span {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 2px solid #1a0d06;
+  border-radius: var(--r-md);
+}
+.mk-target span {
+  background: #0d1c20;
+  color: var(--route);
+  border: 2px solid var(--route);
+  border-radius: 50%;
+}
+.mk-rover i {
+  width: 13px;
+  height: 13px;
+  background: var(--rover);
+  border: 2px solid #17130a;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 0 rgb(236 210 122 / 0.6);
+  animation: ping 2.4s infinite;
+}
+.mk-rover.is-selected i {
+  border-color: #fff;
+}
+@keyframes ping {
+  70% {
+    box-shadow: 0 0 0 10px rgb(236 210 122 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(236 210 122 / 0);
+  }
+}
+.mk-inspect {
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.6),
+    inset 0 0 0 1px rgb(0 0 0 / 0.6);
+  position: relative;
+}
+.mk-inspect::before,
+.mk-inspect::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+}
+.mk-inspect::before {
+  left: 50%;
+  top: -6px;
+  bottom: -6px;
+  width: 1px;
+  mask: linear-gradient(#000 0 9px, transparent 9px calc(100% - 9px), #000 calc(100% - 9px));
+}
+.mk-inspect::after {
+  top: 50%;
+  left: -6px;
+  right: -6px;
+  height: 1px;
+  mask: linear-gradient(90deg, #000 0 9px, transparent 9px calc(100% - 9px), #000 calc(100% - 9px));
+}

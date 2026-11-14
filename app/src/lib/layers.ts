@@ -72,7 +72,7 @@ export const THEMIS_DAY: TileLayerDef = {
   maxNativeZoom: 9,
   defaultOn: false,
   defaultOpacity: 0.85,
-  maxUsefulZoom: 11.5,
+  maxUsefulZoom: 11,
   resolution: '100 m/px',
 }
 
@@ -85,7 +85,7 @@ export const THEMIS_NIGHT: TileLayerDef = {
   maxNativeZoom: 9,
   defaultOn: false,
   defaultOpacity: 0.85,
-  maxUsefulZoom: 11.5,
+  maxUsefulZoom: 11,
   resolution: '100 m/px',
 }
 
@@ -98,7 +98,7 @@ export const GEOLOGY: TileLayerDef = {
   maxNativeZoom: 11,
   defaultOn: false,
   defaultOpacity: 0.55,
-  maxUsefulZoom: 11.5,
+  maxUsefulZoom: 11,
   resolution: '1:20,000,000',
 }
 

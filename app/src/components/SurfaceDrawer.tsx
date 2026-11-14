@@ -15,7 +15,7 @@ function RetryImg({ src, alt }: { src: string; alt: string }) {
 }
 
 /** Surface view: Navcam frames Curiosity took at the selected stop. */
-export default function SurfaceDrawer({ stop, onClose }: { stop: RoverStop; onClose: () => void }) {
+export default function SurfaceView({ stop, onClose }: { stop: RoverStop; onClose: () => void }) {
   const [images, setImages] = useState<RoverImage[] | 'loading' | 'error'>('loading')
 
   useEffect(() => {
@@ -31,20 +31,16 @@ export default function SurfaceDrawer({ stop, onClose }: { stop: RoverStop; onCl
   }, [stop])
 
   return (
-    <div className="surface" role="region" aria-label="Surface view">
-      <header>
-        <div>
-          <h3>Surface view</h3>
-          <p>
-            <code>Curiosity · sol {stop.sol}</code>
-            <code>{fmtCoord(stop)}</code>
-            <span>Navcam · NASA/JPL-Caltech</span>
-          </p>
-        </div>
-        <button type="button" className="icon-btn" onClick={onClose} aria-label="Close surface view">
-          ✕
+    <div className="surf">
+      <div className="surf-meta">
+        <span className="label">Curiosity stop</span>
+        <strong>Sol {stop.sol}</strong>
+        <code>{fmtCoord(stop)}</code>
+        <p>Navcam frames taken at this stop. NASA/JPL-Caltech.</p>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={onClose}>
+          Clear
         </button>
-      </header>
+      </div>
       <div className="strip">
         {images === 'loading' && <p className="muted">Loading frames from mars.nasa.gov…</p>}
         {images === 'error' && <p className="muted">Could not reach the raw image service.</p>}

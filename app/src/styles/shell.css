@@ -1,0 +1,340 @@
+/* Workspace shell: tool rail | work area (top bar, map, dock, status) | mission panel */
+
+.ws {
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--mission-w);
+  grid-template-rows: minmax(0, 1fr);
+  background: var(--bg);
+}
+
+/* ---------- tool rail ---------- */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 0 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  position: relative;
+  z-index: 700;
+}
+.rail-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: inset -5px -4px 0 rgb(0 0 0 / 0.3);
+}
+.rail-group {
+  display: grid;
+  gap: 4px;
+}
+.rail-end {
+  margin-top: auto;
+}
+.rail-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  cursor: pointer;
+}
+.rail-btn:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.rail-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.rail-btn[aria-pressed='true'] {
+  background: var(--accent-wash);
+  color: var(--accent-hi);
+}
+.rail-btn[aria-pressed='true']::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: var(--accent);
+}
+.rail-btn::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  white-space: pre;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s 0.25s;
+}
+.rail-btn:hover::after,
+.rail-btn:focus-visible::after {
+  opacity: 1;
+}
+.rail-btn[aria-pressed='true']::after {
+  display: none;
+}
+.rail-count {
+  position: absolute;
+  top: 2px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* ---------- work area ---------- */
+
+.work {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+}
+
+.topbar {
+  flex: none;
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 10px 0 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.wordmark {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+.topbar-site {
+  color: var(--text-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-site b {
+  color: var(--text-2);
+  font-weight: 500;
+}
+.topbar-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zoom {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.zoom button {
+  width: 28px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.zoom button:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+.zoom button + button {
+  border-left: 1px solid var(--line-strong);
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: #060607;
+}
+
+/* data pane that opens from the rail, over the map */
+.flyout {
+  position: absolute;
+  z-index: 600;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--flyout-w);
+  max-width: calc(100% - 40px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--line-strong);
+  box-shadow: 16px 0 40px rgb(0 0 0 / 0.45);
+  animation: flyout-in 0.14s ease-out;
+}
+@keyframes flyout-in {
+  from {
+    transform: translateX(-12px);
+  }
+}
+.flyout-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 8px 0 var(--pad);
+  border-bottom: 1px solid var(--line);
+}
+.flyout-head h2 {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.flyout-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px var(--pad) 18px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* status bar */
+.status {
+  flex: none;
+  height: var(--status-h);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 12px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.status b {
+  margin-right: 7px;
+  color: var(--text-3);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}
+.status-hint {
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.status-key {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+  color: var(--text-2);
+  font-family: var(--font);
+}
+.status-key li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-key i {
+  width: 18px;
+  height: 0;
+}
+.key-route {
+  border-top: 3px solid var(--route);
+}
+.key-track {
+  border-top: 2px dashed var(--rover);
+}
+.status-key .key-nogo {
+  height: 9px;
+  width: 14px;
+  background: repeating-linear-gradient(135deg, #e03e44 0 2px, rgb(224 62 68 / 0.3) 2px 4px);
+}
+
+/* ---------- mission panel container ---------- */
+
+.mission {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+}
+.mission-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* ---------- toast ---------- */
+
+.toast {
+  position: absolute;
+  z-index: 650;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 6px 5px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.5);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  animation: toast-in 0.16s ease-out;
+}
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, 6px);
+  }
+}
+
+/* ---------- narrower desktops and tablets ---------- */
+
+@media (max-width: 1180px) {
+  :root {
+    --mission-w: 320px;
+  }
+  .topbar-site {
+    display: none;
+  }
+  .status-key li:not(:first-child) {
+    display: none;
+  }
+}

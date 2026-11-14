@@ -1,27 +1,27 @@
 /* Design tokens */
 :root {
   /* Surfaces: graphite */
-  --bg: #0c0d0f;
-  --surface: #131518;
-  --surface-2: #1a1d21;
-  --surface-3: #22262b;
-  --line: #262a30;
-  --line-strong: #383d45;
+  --bg: #0b0c0e;
+  --surface: #121416;
+  --surface-2: #181b1e;
+  --surface-3: #212529;
+  --line: #24282d;
+  --line-strong: #363b42;
 
   /* Text */
-  --text: #e9e6e0;
-  --text-2: #a4a7ab;
-  --text-3: #6d7178;
+  --text: #ebe8e2;
+  --text-2: #a9acb0;
+  --text-3: #757981;
 
   /* Accent: muted Mars orange */
   --accent: #d4683c;
-  --accent-hi: #ec8a5e;
+  --accent-hi: #ee8c60;
   --accent-ink: #1c0f08;
-  --accent-wash: rgb(212 104 60 / 0.12);
+  --accent-wash: rgb(212 104 60 / 0.13);
 
   /* Status */
   --go: #5bbf9b;
-  --nogo: #e0474c;
+  --nogo: #e5504f;
   --warn: #e0b246;
 
   /* Map */
@@ -31,16 +31,24 @@
   /* Type */
   --font: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
-  --fs-xs: 10.5px;
+  --fs-xs: 11px;
   --fs-sm: 12px;
   --fs-md: 13px;
   --fs-lg: 15px;
+  --fs-xl: 19px;
 
   /* Shape and rhythm */
   --r-sm: 2px;
   --r-md: 4px;
-  --gap: 12px;
   --pad: 16px;
+
+  /* Workspace metrics */
+  --rail-w: 48px;
+  --mission-w: 360px;
+  --flyout-w: 312px;
+  --topbar-h: 40px;
+  --status-h: 26px;
+  --dock-tabs-h: 32px;
 
   color-scheme: dark;
 }
@@ -64,6 +72,7 @@ body {
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 button,
@@ -102,6 +111,16 @@ a {
 :focus-visible {
   outline: 2px solid var(--accent-hi);
   outline-offset: 2px;
+}
+
+.boot {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
 }
 
 @media (prefers-reduced-motion: reduce) {

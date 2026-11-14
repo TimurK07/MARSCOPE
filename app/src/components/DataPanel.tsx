@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
 import { GEOLOGY, HIRISE, THEMIS_DAY, THEMIS_NIGHT, type TileLayerDef } from '../lib/layers'
-import { RADIATION, SLOPE_CLASSES } from '../lib/model'
+import { RADIATION, SLOPE_CLASSES, SOURCES } from '../lib/model'
 import { CONTOUR_INDEX_M, CONTOUR_INTERVAL_M, ELEVATION_RAMP, type HazardMode } from '../lib/overlays'
 import type { RoverStop, WeatherSol } from '../lib/nasa'
 import type { Terrain } from '../lib/terrain'
 import { fmtCoord } from '../hooks/usePlan'
 import type { LayerState } from './MapView'
-import { Datum, Section, Segmented, Switch } from './ui'
+import type { RailPane } from './ToolRail'
+import { Datum, Segmented, Switch } from './ui'
 
 interface Props {
+  pane: RailPane
   terrain: Terrain
   zoom: number
   tiles: Record<string, LayerState>
@@ -111,17 +113,32 @@ function TileLayer(props: {
 
 const rampCss = `linear-gradient(90deg, ${ELEVATION_RAMP.map((c) => `rgb(${c.join(',')})`).join(', ')})`
 
-export default function DataPanel(p: Props) {
+/** Group heading inside a data pane. */
+function Group(props: { title: string; note?: string; children: ReactNode }) {
+  return (
+    <div className="group">
+      <div className="group-head">
+        <h3>{props.title}</h3>
+        {props.note && <code>{props.note}</code>}
+      </div>
+      {props.children}
+    </div>
+  )
+}
+
+/** Content of one tool-rail pane. */
+export default function DataPane(p: Props) {
   const elev = p.terrain.meta.elevation
   const slopeLegend = p.hazard.mode === 'hazards' ? SLOPE_CLASSES.filter((c) => c.maxDeg > 15) : SLOPE_CLASSES.slice(1)
-  return (
-    <>
-      <Section title="Imagery">
+
+  if (p.pane === 'layers')
+    return (
+      <>
+        <Group title="Imagery">
         <TileLayer def={HIRISE} zoom={p.zoom} state={p.tiles.hirise} onChange={(s) => p.setTile('hirise', s)} onFitCrater={p.onFitCrater} />
         <p className="footnote">Context basemap (always on): MRO CTX mosaic of Gale crater, Viking MDIM 2.1 color.</p>
-      </Section>
-
-      <Section title="Terrain" aside="HiRISE DEM · 4 m grid">
+      </Group>
+        <Group title="Terrain" note="HiRISE DEM · 4 m grid">
         <Layer
           title="Slope hazard"
           source="Derived from MRO HiRISE DEM"
@@ -172,9 +189,11 @@ export default function DataPanel(p: Props) {
           state={p.contours}
           onChange={p.setContours}
         />
-      </Section>
+      </Group>
+      </>
+    )
 
-      <Section title="Environmental">
+  if (p.pane === 'environment') return <Group title="Measured at Gale crater">
         <div className="card">
           <header>
             <h3>Conditions at Gale</h3>
@@ -227,9 +246,9 @@ export default function DataPanel(p: Props) {
             </div>
           </TileLayer>
         ))}
-      </Section>
+      </Group>
 
-      <Section title="Scientific context">
+  if (p.pane === 'context') return <Group title="Rover and geology">
         <div className={`layer ${p.showTrack ? 'is-on' : ''}`}>
           <div className="layer-head">
             <div>
@@ -260,7 +279,23 @@ export default function DataPanel(p: Props) {
             Back to study area
           </button>
         )}
-      </Section>
-    </>
+      </Group>
+
+  return (
+    <Group title="Model and data sources">
+      <p className="layer-desc">
+        Every constant in the planner comes from a NASA document or a peer-reviewed paper. Map imagery and terrain come
+        from NASA JPL Mars Trek; rover data comes from mars.nasa.gov.
+      </p>
+      <ul className="sources">
+        {SOURCES.map((src) => (
+          <li key={src.url}>
+            <a href={src.url} target="_blank" rel="noreferrer">
+              {src.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </Group>
   )
 }

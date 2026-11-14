@@ -1,82 +1,133 @@
-import { EVA, MAX_SLOPE_DEG, RADIATION, SOURCES } from '../lib/model'
-import type { RouteSample } from '../lib/router'
+import { useEffect, useState } from 'react'
+import { adviceFor } from '../lib/advice'
+import { EVA, MAX_SLOPE_DEG, RADIATION } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
-import Profile from './Profile'
-import { Datum, Section } from './ui'
+import { Datum, Icon, Section } from './ui'
 
 interface Props {
   plan: PlanState
-  cursor: RouteSample | null
-  onCursor: (s: RouteSample | null) => void
   onLoadExample: () => void
   canLoadExample: boolean
   onRemove: (index: number) => void
   onMove: (index: number, dir: -1 | 1) => void
   onClear: () => void
+  /** Compact header for the mobile sheet. */
+  compact?: boolean
 }
 
-type Verdict = 'standby' | 'go' | 'nogo' | 'noroute'
+export type Verdict = 'standby' | 'go' | 'nogo' | 'noroute'
 
-export default function MissionPanel({ plan: s, ...p }: Props) {
+export function verdictOf(s: PlanState): Verdict {
+  return !s.plan ? 'standby' : s.plan.error ? 'noroute' : s.go ? 'go' : 'nogo'
+}
+
+export const VERDICT_TITLE: Record<Verdict, string> = {
+  standby: 'STANDBY',
+  go: 'GO',
+  nogo: 'NO-GO',
+  noroute: 'NO ROUTE',
+}
+
+/** Mission status and primary metrics. Stays fixed above the scrolling plan. */
+export function MissionHead({ plan: s }: { plan: PlanState }) {
   const { plan, checks, points } = s
-  const verdict: Verdict = !plan ? 'standby' : plan.error ? 'noroute' : s.go ? 'go' : 'nogo'
+  const verdict = verdictOf(s)
   const failed = checks?.filter((c) => !c.ok) ?? []
-
-  const verdictText: Record<Verdict, { title: string; line: string }> = {
-    standby: {
-      title: 'STANDBY',
-      line:
-        points.length === 0
-          ? 'No plan yet. Select a habitat site on the map.'
-          : 'Habitat set. Add at least one science target.',
-    },
-    go: { title: 'GO', line: 'Route is within all mission constraints.' },
-    nogo: { title: 'NO-GO', line: `Limit exceeded: ${failed.map((c) => c.label).join('; ')}.` },
-    noroute: { title: 'NO ROUTE', line: plan?.error ?? '' },
-  }
+  const ready = plan && !plan.error
 
   return (
-    <>
-      <div className={`verdict verdict-${verdict}`} role="status" aria-live="polite">
-        <span className="verdict-label">Mission verdict</span>
-        <strong>{verdictText[verdict].title}</strong>
-        <p>{verdictText[verdict].line}</p>
+    <div className="m-head">
+      <div className={`m-status m-status-${verdict}`} role="status" aria-live="polite">
+        <span className="label">Mission status</span>
+        <strong>{VERDICT_TITLE[verdict]}</strong>
+        {verdict === 'standby' && (
+          <p>{points.length === 0 ? 'Select a habitat site on the map.' : 'Habitat set. Add a science target.'}</p>
+        )}
+        {verdict === 'go' && <p>Route is within all mission constraints.</p>}
+        {verdict === 'noroute' && <p>{plan?.error}</p>}
+        {verdict === 'nogo' && (
+          <ul className="m-fail">
+            {failed.map((c) => (
+              <li key={c.id}>
+                <span>{c.label}</span>
+                <code>
+                  {c.value} <i>limit {c.limit.replace('≤ ', '')}</i>
+                </code>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      <dl className="metrics">
+      <dl className="m-metrics">
         <div>
           <dt>Distance</dt>
-          <dd>{plan && !plan.error ? fmtKm(plan.distance) : '—'}</dd>
+          <dd>{ready ? fmtKm(plan.distance) : '—'}</dd>
         </div>
         <div>
           <dt>EVA duration</dt>
-          <dd>{plan && !plan.error ? fmtDur(s.evaSeconds) : '—'}</dd>
-          {plan && !plan.error && <small>{fmtDur(plan.walkTime)} walking</small>}
+          <dd>{ready ? fmtDur(s.evaSeconds) : '—'}</dd>
         </div>
         <div>
-          <dt>Elevation</dt>
-          <dd>{plan && !plan.error ? `+${Math.round(plan.ascent)} / −${Math.round(plan.descent)} m` : '—'}</dd>
+          <dt>Climb / descent</dt>
+          <dd>{ready ? `+${Math.round(plan.ascent)} / −${Math.round(plan.descent)} m` : '—'}</dd>
         </div>
         <div>
           <dt>Energy</dt>
-          <dd>{plan && !plan.error ? `${Math.round(s.energyKcal)} kcal` : '—'}</dd>
+          <dd>{ready ? `${Math.round(s.energyKcal)} kcal` : '—'}</dd>
         </div>
       </dl>
+    </div>
+  )
+}
 
+/** The scrolling part of the mission panel, in planning order. */
+export default function MissionPanel({ plan: s, ...p }: Props) {
+  const { plan, checks, points } = s
+  const verdict = verdictOf(s)
+  const ready = plan && !plan.error
+  const failed = checks?.filter((c) => !c.ok) ?? []
+
+  // Constraints open themselves when the plan turns NO-GO.
+  const [constraintsOpen, setConstraintsOpen] = useState(true)
+  useEffect(() => {
+    if (verdict === 'nogo') setConstraintsOpen(true)
+  }, [verdict])
+
+  const ratios: Record<string, number> = ready
+    ? {
+        duration: s.evaSeconds / (EVA.maxDuration_h * 3600),
+        range: plan.farthest / (EVA.walkRadius_km * 1000),
+        slope: plan.maxSlope / MAX_SLOPE_DEG,
+      }
+    : {}
+  const adviceInput = ready
+    ? { points, walkTime: plan.walkTime, stopMinutes: s.stopMinutes, farthest: plan.farthest }
+    : null
+  const targets = Math.max(points.length - 1, 0)
+
+  return (
+    <>
       <Section
         title="Route checkpoints"
         fixed
         aside={
-          <span className="row-actions">
-            <button type="button" className="btn btn-sm btn-ghost" onClick={s.undo} disabled={!s.canUndo} title="Undo (Ctrl/⌘ Z)">
-              Undo
-            </button>
-            {points.length > 0 && (
+          points.length > 0 ? (
+            <span className="row-actions">
+              <button type="button" className="btn btn-sm btn-ghost" onClick={s.undo} disabled={!s.canUndo} title="Undo (Ctrl/⌘ Z)">
+                Undo
+              </button>
               <button type="button" className="btn btn-sm btn-ghost" onClick={p.onClear}>
                 Clear
               </button>
-            )}
-          </span>
+            </span>
+          ) : s.canUndo ? (
+            <span className="row-actions">
+              <button type="button" className="btn btn-sm btn-ghost" onClick={s.undo}>
+                Undo
+              </button>
+            </span>
+          ) : undefined
         }
       >
         {points.length === 0 ? (
@@ -91,8 +142,8 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
                 <span>Inspect further points and add them in visiting order.</span>
               </li>
               <li>
-                <b>Review the verdict</b>
-                <span>The route, constraints and exposure update as you edit.</span>
+                <b>Review the mission status</b>
+                <span>Route, constraints and exposure update as you edit.</span>
               </li>
             </ol>
             <button type="button" className="btn btn-primary btn-block" onClick={p.onLoadExample} disabled={!p.canLoadExample}>
@@ -113,7 +164,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
                     {i > 0 && (
                       <>
                         <button type="button" className="icon-btn" aria-label={`Move target ${i} earlier`} disabled={i === 1} onClick={() => p.onMove(i, -1)}>
-                          ↑
+                          <Icon name="up" size={14} />
                         </button>
                         <button
                           type="button"
@@ -122,12 +173,12 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
                           disabled={i === points.length - 1}
                           onClick={() => p.onMove(i, 1)}
                         >
-                          ↓
+                          <Icon name="down" size={14} />
                         </button>
                       </>
                     )}
                     <button type="button" className="icon-btn" aria-label={i === 0 ? 'Remove habitat' : `Remove target ${i}`} onClick={() => p.onRemove(i)}>
-                      ✕
+                      <Icon name="close" size={14} />
                     </button>
                   </span>
                 </li>
@@ -146,7 +197,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
         )}
       </Section>
 
-      <Section title="Mission parameters" defaultOpen={points.length > 0}>
+      <Section title="Mission parameters" defaultOpen={false} aside={`${s.stopMinutes} min · ${s.massKg} kg`}>
         <div className="params">
           <label className="param-check">
             <input type="checkbox" checked={s.roundTrip} onChange={(e) => s.setRoundTrip(e.target.checked)} />
@@ -185,85 +236,60 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
 
       <Section
         title="Mission constraints"
-        aside={checks ? `${checks.length - failed.length}/${checks.length} met` : undefined}
+        open={constraintsOpen}
+        onToggle={setConstraintsOpen}
+        aside={checks ? `${checks.length - failed.length} of ${checks.length} met` : undefined}
       >
-        {checks ? (
-          <ul className="checks">
-            {checks.map((c) => (
-              <li key={c.id} className={c.ok ? 'ok' : 'bad'}>
-                <i aria-hidden="true">{c.ok ? '✓' : '!'}</i>
-                <span>{c.label}</span>
-                <code className="limit">{c.limit}</code>
-                <code className="val">{c.value}</code>
+        <ul className="limits">
+          {(checks ?? [
+            { id: 'duration', label: 'EVA duration', value: '—', limit: `≤ ${EVA.maxDuration_h} h`, ok: true },
+            { id: 'range', label: 'Farthest point from habitat', value: '—', limit: `≤ ${EVA.walkRadius_km} km`, ok: true },
+            { id: 'slope', label: 'Steepest terrain on route', value: '—', limit: `≤ ${MAX_SLOPE_DEG}°`, ok: true },
+          ]).map((c) => {
+            const advice = !c.ok && adviceInput ? adviceFor(c.id, adviceInput) : null
+            const ratio = ratios[c.id]
+            return (
+              <li key={c.id} className={!checks ? 'idle' : c.ok ? 'ok' : 'bad'}>
+                <div className="limit-row">
+                  <span>{c.label}</span>
+                  <code>
+                    <b>{c.value}</b> <i>{c.limit}</i>
+                  </code>
+                </div>
+                <div className="limit-bar" aria-hidden="true">
+                  <i style={{ width: `${Math.min(ratio ?? 0, 1) * 100}%` }} />
+                </div>
+                {advice && <p className="limit-advice">{advice}</p>}
               </li>
-            ))}
-          </ul>
-        ) : (
-          <ul className="checks checks-idle">
-            <li>
-              <i aria-hidden="true">·</i>
-              <span>EVA duration</span>
-              <code className="limit">≤ {EVA.maxDuration_h} h</code>
-            </li>
-            <li>
-              <i aria-hidden="true">·</i>
-              <span>Farthest point from habitat</span>
-              <code className="limit">≤ {EVA.walkRadius_km} km</code>
-            </li>
-            <li>
-              <i aria-hidden="true">·</i>
-              <span>Steepest terrain on route</span>
-              <code className="limit">≤ {MAX_SLOPE_DEG}°</code>
-            </li>
-          </ul>
-        )}
+            )
+          })}
+        </ul>
         <p className="footnote">Limits from NASA EVA-EXP-0075, Exploration EVA System Concept of Operations.</p>
       </Section>
 
-      <Section title="Radiation exposure" defaultOpen={false} aside={plan && !plan.error ? `${s.doseMsv.toFixed(3)} mSv` : undefined}>
-        <dl className="data">
-          <Datum label="Dose for this EVA">{plan && !plan.error ? `${s.doseMsv.toFixed(3)} mSv` : '—'}</Datum>
-          <Datum label="Surface rate (RAD)">{RADIATION.doseEquivalent_mSv_per_day} mSv/day</Datum>
-          <Datum label="Share of career limit">
-            {plan && !plan.error ? `${((s.doseMsv / RADIATION.careerLimit_mSv) * 100).toFixed(3)} %` : '—'}
-          </Datum>
-          <Datum label="Career limit">{RADIATION.careerLimit_mSv} mSv</Datum>
-        </dl>
-        <p className="footnote">{RADIATION.note}</p>
-      </Section>
-
-      <Section title="Terrain profile">
-        {plan && !plan.error && plan.samples.length > 1 ? (
-          <>
-            <Profile samples={plan.samples} stops={plan.legStarts} onCursor={p.onCursor} />
-            <p className="profile-read">
-              {p.cursor ? (
-                <>
-                  <code>{fmtKm(p.cursor.dist)}</code>
-                  <code>{fmtDur(p.cursor.time)}</code>
-                  <code>{p.cursor.elevation.toFixed(0)} m</code>
-                  <code>{p.cursor.slope.toFixed(1)}°</code>
-                </>
-              ) : (
-                <span>Move over the profile to trace the route on the map.</span>
-              )}
-            </p>
-          </>
+      <Section title="Route telemetry" defaultOpen={false}>
+        {ready ? (
+          <dl className="data">
+            <Datum label="Walking time">{fmtDur(plan.walkTime)}</Datum>
+            <Datum label="Time at targets">{fmtDur(targets * s.stopMinutes * 60)}</Datum>
+            <Datum label="Mean walking speed">{(plan.distance / plan.walkTime).toFixed(2)} m/s</Datum>
+            <Datum label="Steepest terrain">{plan.maxSlope.toFixed(1)}°</Datum>
+            <Datum label="Farthest from habitat">{fmtKm(plan.farthest)}</Datum>
+            <Datum label="Route legs">{plan.legs.length}</Datum>
+          </dl>
         ) : (
-          <p className="muted">The elevation profile appears once a route is planned.</p>
+          <p className="muted">Available once a route is planned.</p>
         )}
       </Section>
 
-      <Section title="Data sources" defaultOpen={false}>
-        <ul className="sources">
-          {SOURCES.map((src) => (
-            <li key={src.url}>
-              <a href={src.url} target="_blank" rel="noreferrer">
-                {src.label}
-              </a>
-            </li>
-          ))}
-        </ul>
+      <Section title="Radiation exposure" defaultOpen={false} aside={ready ? `${s.doseMsv.toFixed(3)} mSv` : undefined}>
+        <dl className="data">
+          <Datum label="Dose for this EVA">{ready ? `${s.doseMsv.toFixed(3)} mSv` : '—'}</Datum>
+          <Datum label="Surface rate (RAD)">{RADIATION.doseEquivalent_mSv_per_day} mSv/day</Datum>
+          <Datum label="Share of career limit">{ready ? `${((s.doseMsv / RADIATION.careerLimit_mSv) * 100).toFixed(3)} %` : '—'}</Datum>
+          <Datum label="Career limit">{RADIATION.careerLimit_mSv} mSv</Datum>
+        </dl>
+        <p className="footnote">{RADIATION.note}</p>
       </Section>
     </>
   )

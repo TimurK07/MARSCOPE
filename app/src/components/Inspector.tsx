@@ -3,7 +3,6 @@ import { fetchGeologicUnit, type GeologicUnit } from '../lib/geology'
 import { MAX_SLOPE_DEG, slopeClass, surfaceDistanceM } from '../lib/model'
 import { cellAt, elevationAt, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
 import { fmtKm, fmtLat, fmtLon } from '../hooks/usePlan'
-import { Datum } from './ui'
 
 interface Props {
   terrain: Terrain
@@ -38,60 +37,82 @@ export default function Inspector({ terrain, point, habitat, targetCount, onSetH
   const blocked = !inside || Number.isNaN(slope) || slope > MAX_SLOPE_DEG
 
   return (
-    <div className="inspector" role="dialog" aria-label="Point inspector">
-      <header>
-        <h3>Point inspector</h3>
-        <button type="button" className="icon-btn" onClick={onClose} aria-label="Close inspector">
-          ✕
-        </button>
-      </header>
-      <dl className="data">
-        <Datum label="Latitude">{fmtLat(point.lat)}</Datum>
-        <Datum label="Longitude">{fmtLon(point.lon)}</Datum>
-        {inside && (
+    <div className="insp">
+      <dl className="insp-data">
+        <div>
+          <dt>Latitude</dt>
+          <dd>{fmtLat(point.lat)}</dd>
+        </div>
+        <div>
+          <dt>Longitude</dt>
+          <dd>{fmtLon(point.lon)}</dd>
+        </div>
+        <div>
+          <dt>Elevation</dt>
+          <dd>{inside ? `${elevationAt(terrain, idx).toFixed(1)} m` : '—'}</dd>
+        </div>
+        <div>
+          <dt>Slope</dt>
+          <dd>
+            {cls ? (
+              <>
+                <i className="dot" style={{ background: `rgb(${cls.rgb.join(',')})` }} />
+                {slope.toFixed(1)}° <span>{cls.label.toLowerCase()}</span>
+              </>
+            ) : (
+              '—'
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>From habitat</dt>
+          <dd>{habitat ? fmtKm(surfaceDistanceM(habitat, point)) : '—'}</dd>
+        </div>
+        <div className="insp-wide">
+          <dt>Geologic unit · USGS SIM 3292</dt>
+          <dd>
+            {unit === 'loading' ? (
+              '…'
+            ) : unit === 'error' ? (
+              'unavailable'
+            ) : unit ? (
+              <>
+                {unit.code} <span>{unit.description}</span>
+              </>
+            ) : (
+              'unmapped'
+            )}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="insp-side">
+        {!inside ? (
+          <p className="gate-note">Outside the study area. Routing needs the 4 m terrain grid inside the dashed frame.</p>
+        ) : blocked ? (
+          <p className="gate-note">Steeper than the {MAX_SLOPE_DEG}° limit. A checkpoint cannot be placed here.</p>
+        ) : (
           <>
-            <Datum label="Elevation">{elevationAt(terrain, idx).toFixed(1)} m</Datum>
-            <Datum label="Slope">
-              {cls ? (
-                <>
-                  <i className="dot" style={{ background: `rgb(${cls.rgb.join(',')})` }} />
-                  {slope.toFixed(1)}° · {cls.label.toLowerCase()}
-                </>
-              ) : (
-                'no data'
-              )}
-            </Datum>
+            {habitat ? (
+              <button type="button" className="btn btn-primary" onClick={onAddTarget}>
+                Add as target {targetCount + 1}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-primary" onClick={onSetHabitat}>
+                Set as habitat
+              </button>
+            )}
+            {habitat && (
+              <button type="button" className="btn" onClick={onSetHabitat}>
+                Move habitat here
+              </button>
+            )}
           </>
         )}
-        {habitat && <Datum label="From habitat">{fmtKm(surfaceDistanceM(habitat, point))}</Datum>}
-        <Datum label="Geologic unit">
-          {unit === 'loading' ? '…' : unit === 'error' ? 'unavailable' : unit ? unit.code : 'unmapped'}
-        </Datum>
-      </dl>
-      {unit && typeof unit === 'object' && <p className="footnote">{unit.description} (USGS SIM 3292).</p>}
-
-      {!inside ? (
-        <p className="gate-note">Outside the study area. Routing needs the 4 m terrain grid inside the dashed frame.</p>
-      ) : blocked ? (
-        <p className="gate-note">Steeper than the {MAX_SLOPE_DEG}° limit. A checkpoint cannot be placed here.</p>
-      ) : (
-        <div className="inspector-actions">
-          {habitat ? (
-            <button type="button" className="btn btn-primary" onClick={onAddTarget}>
-              Add as target {targetCount + 1}
-            </button>
-          ) : (
-            <button type="button" className="btn btn-primary" onClick={onSetHabitat}>
-              Set as habitat
-            </button>
-          )}
-          {habitat && (
-            <button type="button" className="btn" onClick={onSetHabitat}>
-              Move habitat here
-            </button>
-          )}
-        </div>
-      )}
+        <button type="button" className="btn btn-ghost" onClick={onClose}>
+          Clear selection
+        </button>
+      </div>
     </div>
   )
 }
