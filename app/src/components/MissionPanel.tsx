@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { adviceFor } from '../lib/advice'
 import { buildChecks } from '../lib/mission'
+import { CAUTION_WEIGHT, ROUTE_MODES, type RouteMode } from '../lib/objectives'
+import type { ModeSummary } from '../lib/planner'
 import { EVA, MAX_SLOPE_DEG, RADIATION } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
-import { Datum, Icon, Section } from './ui'
+import { Datum, Icon, Section, Segmented } from './ui'
 
 interface Props {
   plan: PlanState
@@ -14,6 +16,104 @@ interface Props {
   onClear: () => void
   /** Compact header for the mobile sheet. */
   compact?: boolean
+}
+
+const VERDICT_SHORT: Record<Verdict, string> = { standby: '—', go: 'GO', nogo: 'NO-GO', noroute: 'NO ROUTE' }
+
+/** The three routes for the same checkpoints, measured the same way, side by side. */
+function ModeComparison(props: {
+  comparison: Record<RouteMode, ModeSummary | null>
+  selected: RouteMode
+  onSelect: (m: RouteMode) => void
+  pending: boolean
+}) {
+  const cols = ROUTE_MODES.map((m) => ({ ...m, data: props.comparison[m.id] }))
+  const any = cols.some((c) => c.data)
+  const rows: { label: string; hint?: string; value: (d: ModeSummary) => string; num?: (d: ModeSummary) => number }[] = [
+    { label: 'Distance', value: (d) => fmtKm(d.distance), num: (d) => d.distance },
+    { label: 'Walking time', value: (d) => fmtDur(d.walkTime), num: (d) => d.walkTime },
+    { label: 'Walking energy', value: (d) => `${Math.round(d.energyKcal)} kcal`, num: (d) => d.energyKcal },
+    { label: 'Climb', value: (d) => `+${Math.round(d.ascent)} m`, num: (d) => d.ascent },
+    {
+      label: 'Hidden steep ground',
+      hint: 'Steep-pixel shares of the cells crossed, added up. 1.0 equals one 4 m cell that is entirely steeper than 20° at the 1 m scale.',
+      value: (d) => (d.exposure ? d.exposure.load.toFixed(1) : '—'),
+      num: (d) => d.exposure?.load ?? NaN,
+    },
+    {
+      label: 'per km',
+      hint: 'The same, per kilometre of route, so routes of different lengths can be compared.',
+      value: (d) => (d.exposure ? d.exposure.perKm.toFixed(1) : '—'),
+      num: (d) => d.exposure?.perKm ?? NaN,
+    },
+    {
+      label: 'cells affected',
+      hint: 'Share of the cells crossed that contain any steep 1 m pixel.',
+      value: (d) => (d.exposure ? `${(d.exposure.cellShare * 100).toFixed(1)}%` : '—'),
+      num: (d) => d.exposure?.cellShare ?? NaN,
+    },
+  ]
+  const current = ROUTE_MODES.find((m) => m.id === props.selected)!
+  return (
+    <div className="cmp">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">
+              <span className="sr-only">Metric</span>
+            </th>
+            {cols.map((c) => (
+              <th key={c.id} scope="col" className={c.id === props.selected ? 'is-on' : ''}>
+                <button type="button" aria-pressed={c.id === props.selected} onClick={() => props.onSelect(c.id)} title={c.short}>
+                  {c.id === 'energy' ? 'Energy' : c.label}
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Status</th>
+            {cols.map((c) => (
+              <td key={c.id} className={`${c.id === props.selected ? 'is-on' : ''} v-${c.data?.verdict ?? 'standby'}`}>
+                {c.data ? VERDICT_SHORT[c.data.verdict] : props.pending ? '…' : '—'}
+              </td>
+            ))}
+          </tr>
+          {rows.map((r) => {
+            // The lowest value in a row is marked; ties are all marked.
+            const nums = cols.map((c) => (c.data?.feasible && r.num ? r.num(c.data) : NaN))
+            const min = Math.min(...nums.filter((n) => !Number.isNaN(n)))
+            return (
+              <tr key={r.label}>
+                <th scope="row" title={r.hint}>
+                  {r.label}
+                </th>
+                {cols.map((c, i) => (
+                  <td key={c.id} className={`${c.id === props.selected ? 'is-on' : ''} ${nums[i] === min ? 'is-min' : ''}`}>
+                    {c.data?.feasible ? r.value(c.data) : '—'}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {!any && <p className="muted">{props.pending ? 'Calculating the three routes…' : 'Plan a route to compare the three priorities.'}</p>}
+      <p className="cmp-note">
+        <b>{current.label}.</b> {current.summary}
+      </p>
+      <p className="footnote">
+        All three routes obey the same hard limits: {MAX_SLOPE_DEG}° maximum slope, no clipping of no-go cells, and the same
+        EVA and walk-back checks. They are measured the same way; the lowest value in each row is underlined. Walking
+        energy is an approximation adapted from research on Earth (Santee et al. 2001) and scaled to Mars gravity.
+        Cautious weights time on hidden steep ground by 1 + {CAUTION_WEIGHT} × the cell's steep share: a heuristic
+        coefficient of ours, not a NASA-certified safety model and not a measured risk. Each route is the least-cost
+        path on the 4 m grid for its own objective; it is then straightened, and the straightened route is not proven
+        optimal. No priority guarantees a safe route.
+      </p>
+    </div>
+  )
 }
 
 /** Signed saving: positive means the straightened path is shorter or quicker. */
@@ -45,7 +145,13 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
         <span className="label">Mission status</span>
         <strong>{VERDICT_TITLE[verdict]}</strong>
         {verdict === 'standby' && (
-          <p>{points.length === 0 ? 'Select a habitat site on the map.' : 'Habitat set. Add a science target.'}</p>
+          <p>
+            {s.pending
+              ? 'Calculating routes…'
+              : points.length === 0
+                ? 'Select a habitat site on the map.'
+                : 'Habitat set. Add a science target.'}
+          </p>
         )}
         {verdict === 'go' && <p>Route is within all mission constraints.</p>}
         {verdict === 'noroute' && <p>{plan?.error}</p>}
@@ -81,6 +187,20 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
           <dd>{ready ? `${Math.round(s.energyKcal)} kcal` : '—'}</dd>
         </div>
       </dl>
+
+      <div className="m-mode">
+        <span className="label">Route priority</span>
+        <Segmented
+          label="Route priority"
+          value={s.mode}
+          onChange={s.setMode}
+          options={[
+            { value: 'fastest', label: 'Fastest' },
+            { value: 'energy', label: 'Energy' },
+            { value: 'cautious', label: 'Cautious' },
+          ]}
+        />
+      </div>
     </div>
   )
 }
@@ -203,6 +323,10 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
             {points.length === 1 && <p className="hint">Next: click the map and add a science target.</p>}
           </>
         )}
+      </Section>
+
+      <Section title="Compare route priorities" defaultOpen={false} aside={ROUTE_MODES.find((m) => m.id === s.mode)!.label}>
+        <ModeComparison comparison={s.comparison} selected={s.mode} onSelect={s.setMode} pending={s.pending} />
       </Section>
 
       <Section title="Mission parameters" defaultOpen={false} aside={`${s.stopMinutes} min · ${s.massKg} kg`}>

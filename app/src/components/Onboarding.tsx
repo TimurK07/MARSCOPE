@@ -23,7 +23,8 @@ export default function Onboarding({ onStart, onExample, canExample, hasPlan }: 
           <h2 id="brief-title">Plan a Marswalk before anyone steps outside.</h2>
           <p className="brief-lede">
             MARSCOPE is a mission-planning workspace for a surface EVA. It layers data from NASA missions over the
-            ground Curiosity is exploring and finds the safest walking route between a habitat and your science targets.
+            ground Curiosity is exploring and plans walking routes between a habitat and your science targets that stay
+            within NASA's 20° slope limit. It is a planning aid, not a safety certification.
           </p>
           <ol className="brief-steps">
             <li>

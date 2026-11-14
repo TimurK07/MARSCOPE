@@ -4,12 +4,13 @@
 // A straight shortcut is accepted only when all of these hold:
 //   1. every cell the line passes through is walkable, including both cells
 //      beside any grid corner the line touches;
-//   2. walking it, with the same direction-dependent speed model, takes no
-//      longer than the grid path it replaces;
+//   2. by the objective the route is optimised for (time, energy, or the
+//      cautious weighting), it costs no more than the grid path it replaces;
 //   3. it does not cross more hidden steep ground, in total, than the path it replaces.
 // A shorter line is therefore not assumed to be better: it has to prove it.
 
 import { MAX_SLOPE_DEG, segmentEnergy, walkingSpeedMs } from './model'
+import { timeObjective, type Objective } from './objectives'
 import { elevationAtPoint, hiddenSteepShare, pointToLatLon, slopeAt, type LatLon, type Terrain } from './terrain'
 
 export interface PathSample extends LatLon {
@@ -44,6 +45,10 @@ export interface PathMeasure {
   hiddenMax: number | null
   /** Share of the cells crossed that contain any hidden steep ground. */
   hiddenCells: number | null
+  /** Number of distinct cells the path passes through. */
+  cellsCrossed: number
+  /** Value of the objective the path was measured against (seconds, joules, or weighted seconds). */
+  cost: number
 }
 
 const walkable = (t: Terrain, x: number, y: number): boolean => {
@@ -53,7 +58,7 @@ const walkable = (t: Terrain, x: number, y: number): boolean => {
 }
 
 /**
- * Cells crossed by the straight line between two cell centres, in order.
+ * Cells the straight line between two cell centres passes through, in order.
  * Returns null when the line would touch ground that is not walkable.
  *
  * Integer arithmetic keeps the corner case exact: when the line passes through
@@ -77,8 +82,8 @@ export function lineCells(t: Terrain, x0: number, y0: number, x1: number, y1: nu
     const ty = (1 + 2 * iy) * nx
     if (tx === ty) {
       // Exactly through a corner: both neighbours of the corner must be safe too.
+      // They are only touched at a point, so they are checked but not listed as crossed.
       if (!walkable(t, x + sx, y) || !walkable(t, x, y + sy)) return null
-      cells.push(y * t.width + (x + sx), (y + sy) * t.width + x)
       x += sx
       y += sy
       ix++
@@ -103,6 +108,7 @@ interface Totals {
   descent: number
   perKg: number
   fixed: number
+  cost: number
 }
 
 /**
@@ -111,7 +117,7 @@ interface Totals {
  * A step between neighbouring cells is a single piece, so a grid path measured
  * this way gives exactly what the route search charged for it.
  */
-function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number, tot: Totals, out: PathSample[] | null) {
+function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number, tot: Totals, out: PathSample[] | null, obj: Objective) {
   const cx = t.meta.cellSizeX_m
   const cy = t.meta.cellSizeY_m
   const length = Math.hypot((x1 - x0) * cx, (y1 - y0) * cy)
@@ -134,8 +140,9 @@ function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number,
     const e = segmentEnergy(d, grade, speed)
     tot.perKg += e.perKg
     tot.fixed += e.fixed
+    const cell = Math.min(Math.floor(fy), t.height - 1) * t.width + Math.min(Math.floor(fx), t.width - 1)
+    tot.cost += obj.pieceCost(d, grade, cell)
     if (out) {
-      const cell = Math.min(Math.floor(fy), t.height - 1) * t.width + Math.min(Math.floor(fx), t.width - 1)
       out.push({ ...pointToLatLon(t, fx, fy), dist: tot.dist, elevation: z, grade, slope: slopeAt(t, cell), time: tot.time })
     }
     fxPrev = fx
@@ -144,11 +151,13 @@ function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number,
   }
 }
 
-/** Time to walk the straight line between two cell centres, seconds. */
-function segmentTime(t: Terrain, x0: number, y0: number, x1: number, y1: number): number {
-  const tot: Totals = { dist: 0, time: 0, ascent: 0, descent: 0, perKg: 0, fixed: 0 }
-  walkSegment(t, x0, y0, x1, y1, tot, null)
-  return tot.time
+const zero = (): Totals => ({ dist: 0, time: 0, ascent: 0, descent: 0, perKg: 0, fixed: 0, cost: 0 })
+
+/** Cost of the straight line between two cell centres, by the given objective. */
+function segmentCost(t: Terrain, x0: number, y0: number, x1: number, y1: number, obj: Objective): number {
+  const tot = zero()
+  walkSegment(t, x0, y0, x1, y1, tot, null, obj)
+  return tot.cost
 }
 
 /**
@@ -166,9 +175,9 @@ const hiddenAlong = (t: Terrain, cells: number[]): number => {
  * Returns null if any line touches ground that is not walkable: an unsafe
  * path is never measured as if it were usable.
  */
-export function measurePath(t: Terrain, vertices: number[]): PathMeasure | null {
+export function measurePath(t: Terrain, vertices: number[], obj: Objective = timeObjective()): PathMeasure | null {
   const w = t.width
-  const tot: Totals = { dist: 0, time: 0, ascent: 0, descent: 0, perKg: 0, fixed: 0 }
+  const tot = zero()
   const x = (c: number) => c % w
   const y = (c: number) => Math.floor(c / w)
   const first = vertices[0]
@@ -186,7 +195,7 @@ export function measurePath(t: Terrain, vertices: number[]): PathMeasure | null 
     if (!cells) return null
     for (const c of cells) crossed.add(c)
     hiddenLoad += hiddenAlong(t, cells)
-    walkSegment(t, x(a), y(a), x(b), y(b), tot, samples)
+    walkSegment(t, x(a), y(a), x(b), y(b), tot, samples, obj)
   }
   let maxSlope = 0
   let hiddenMax: number | null = t.subSteep ? 0 : null
@@ -213,6 +222,8 @@ export function measurePath(t: Terrain, vertices: number[]): PathMeasure | null 
     hiddenLoad: t.subSteep ? hiddenLoad : null,
     hiddenMax,
     hiddenCells: t.subSteep ? hiddenAny / all.length : null,
+    cellsCrossed: all.length,
+    cost: tot.cost,
   }
 }
 
@@ -223,20 +234,23 @@ const MAX_MISSES = 24
 
 /**
  * Straightens a grid path. Returns the cells to keep as vertices; joined by
- * straight lines they form a path that is safe, no slower than the grid path,
- * and crosses no more hidden steep ground than it did.
+ * straight lines they form a path that is safe, costs no more than the grid
+ * path by the given objective, and crosses no more hidden steep ground.
+ *
+ * This is a greedy pass. It never makes the route worse, but it is not proven
+ * to give the best possible straightened geometry.
  */
-export function smoothPath(t: Terrain, cells: number[]): number[] {
+export function smoothPath(t: Terrain, cells: number[], obj: Objective = timeObjective()): number[] {
   if (cells.length < 3) return cells.slice()
   const w = t.width
   const x = (c: number) => c % w
   const y = (c: number) => Math.floor(c / w)
 
   // Running totals along the grid path, for comparing any stretch of it with a shortcut.
-  const time = new Float64Array(cells.length)
+  const cost = new Float64Array(cells.length)
   const hidden = new Float64Array(cells.length)
   for (let i = 1; i < cells.length; i++) {
-    time[i] = time[i - 1] + segmentTime(t, x(cells[i - 1]), y(cells[i - 1]), x(cells[i]), y(cells[i]))
+    cost[i] = cost[i - 1] + segmentCost(t, x(cells[i - 1]), y(cells[i - 1]), x(cells[i]), y(cells[i]), obj)
     const step = t.subSteep ? lineCells(t, x(cells[i - 1]), y(cells[i - 1]), x(cells[i]), y(cells[i])) : null
     hidden[i] = hidden[i - 1] + (step ? hiddenAlong(t, step) : 0)
   }
@@ -246,7 +260,8 @@ export function smoothPath(t: Terrain, cells: number[]): number[] {
     const b = cells[j]
     const line = lineCells(t, x(a), y(a), x(b), y(b))
     if (!line) return false
-    if (segmentTime(t, x(a), y(a), x(b), y(b)) > time[j] - time[i] + 1e-6) return false
+    const replaced = cost[j] - cost[i]
+    if (segmentCost(t, x(a), y(a), x(b), y(b), obj) > replaced * (1 + 1e-12) + 1e-9) return false
     // Same accounting as for the grid path: total hidden steep ground must not grow.
     if (t.subSteep && hiddenAlong(t, line) > hidden[j] - hidden[i] + 1e-9) return false
     return true

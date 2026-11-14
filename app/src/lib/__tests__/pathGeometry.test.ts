@@ -21,12 +21,10 @@ describe('line of sight over the grid', () => {
     expect(xy(free, lineCells(free, 0, 0, 2, 1)!)).toEqual([[0, 0], [1, 0], [1, 1], [2, 1]])
   })
 
-  it('includes both cells beside a corner the line passes through', () => {
-    const cells = xy(free, lineCells(free, 1, 1, 3, 3)!)
-    expect(cells).toContainEqual([2, 1])
-    expect(cells).toContainEqual([1, 2])
-    expect(cells).toContainEqual([3, 2])
-    expect(cells).toContainEqual([2, 3])
+  it('lists only the cells walked through on a pure diagonal', () => {
+    // The line touches the corners of (2,1), (1,2), (3,2) and (2,3) at a single point each.
+    // Those cells are checked for safety (see below) but are not part of the path.
+    expect(xy(free, lineCells(free, 1, 1, 3, 3)!)).toEqual([[1, 1], [2, 2], [3, 3]])
   })
 
   it('is blocked by a cell on the line', () => {

@@ -1,40 +1,37 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { buildChecks, type Check } from '../lib/mission'
-import { RADIATION, surfaceDistanceM } from '../lib/model'
-import { findLeg, walkBack, type LegResult, type RouteLeg, type RouteSample, type WalkBack } from '../lib/router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { RADIATION } from '../lib/model'
+import type { RouteMode } from '../lib/objectives'
+import { ROUTE_MODES } from '../lib/objectives'
+import { summarise, type ModeSummary, type Plan, type PlanInput } from '../lib/planner'
+import { PlanService, type PlanUpdate, type WorkerLike } from '../lib/planService'
 import type { LatLon, Terrain } from '../lib/terrain'
 
-export interface Plan {
-  legs: RouteLeg[]
-  error: string | null
-  samples: RouteSample[]
-  legStarts: number[]
-  distance: number
-  walkTime: number
-  ascent: number
-  descent: number
-  maxSlope: number
-  energyPerKg: number
-  energyFixed: number
-  /** Farthest point of the route from the habitat in a straight line, metres. For information only. */
-  farthest: number
-  /** Worst-case walk back to the habitat from anywhere on the route. */
-  walkBack: WalkBack | null
-}
-
 export type { Check } from '../lib/mission'
+export type { Plan } from '../lib/planner'
 
 export { fmtCoord, fmtDur, fmtKm, fmtLat, fmtLon } from '../lib/format'
 
 const HISTORY_LIMIT = 50
 
-/** EVA plan state: checkpoints with undo, mission parameters, route and safety checks. */
+/**
+ * EVA plan state: checkpoints with undo, mission parameters, the routes for all
+ * three priorities and the safety checks of the selected one.
+ *
+ * Routes come from a PlanService: a Web Worker when available, the main thread
+ * otherwise. Only the answer to the latest request is used, so quick edits can
+ * never leave an outdated route on screen.
+ */
 export function usePlan(terrain: Terrain | null) {
   const [state, setState] = useState<{ points: LatLon[]; history: LatLon[][] }>({ points: [], history: [] })
   const points = state.points
   const [roundTrip, setRoundTrip] = useState(true)
   const [stopMinutes, setStopMinutes] = useState(20)
   const [massKg, setMassKg] = useState(180)
+  const [mode, setMode] = useState<RouteMode>('fastest')
+  const [result, setResult] = useState<PlanUpdate | null>(null)
+  const [pending, setPending] = useState(false)
+  const modeRef = useRef(mode)
+  modeRef.current = mode
 
   /** Replace the checkpoint list, remembering the previous one for undo. */
   const setPoints = useCallback((next: LatLon[] | ((prev: LatLon[]) => LatLon[])) => {
@@ -50,68 +47,61 @@ export function usePlan(terrain: Terrain | null) {
     )
   }, [])
 
-  // Route legs, cached so editing one checkpoint only recomputes its legs.
-  const legCache = useRef(new Map<string, LegResult>())
-  const plan = useMemo<Plan | null>(() => {
-    if (!terrain || points.length < 2) return null
-    const seq = roundTrip ? [...points, points[0]] : points
-    const legs: RouteLeg[] = []
-    let error: string | null = null
-    for (let i = 0; i < seq.length - 1; i++) {
-      const key = `${seq[i].lat},${seq[i].lon}>${seq[i + 1].lat},${seq[i + 1].lon}`
-      let res = legCache.current.get(key)
-      if (!res) {
-        res = findLeg(terrain, seq[i], seq[i + 1])
-        legCache.current.set(key, res)
-      }
-      if (!res.ok) {
-        const to = i + 1 === seq.length - 1 && roundTrip ? 'habitat' : `target ${i + 1}`
-        error = `Leg to ${to}: ${res.reason}`
-        break
-      }
-      legs.push(res.leg)
-    }
-    const samples: RouteSample[] = []
-    const legStarts: number[] = []
-    let dist = 0
-    let time = 0
-    let farthest = 0
-    for (const leg of legs) {
-      if (dist > 0) legStarts.push(dist)
-      for (const s of leg.samples) {
-        samples.push({ ...s, dist: s.dist + dist, time: s.time + time })
-        const d = surfaceDistanceM(points[0], s)
-        if (d > farthest) farthest = d
-      }
-      dist += leg.distance
-      time += leg.duration
-    }
-    return {
-      legs,
-      error,
-      samples,
-      legStarts,
-      distance: dist,
-      walkTime: time,
-      ascent: legs.reduce((a, l) => a + l.ascent, 0),
-      descent: legs.reduce((a, l) => a + l.descent, 0),
-      maxSlope: legs.reduce((a, l) => Math.max(a, l.maxSlope), 0),
-      energyPerKg: legs.reduce((a, l) => a + l.energyPerKg, 0),
-      energyFixed: legs.reduce((a, l) => a + l.energyFixed, 0),
-      farthest,
-      // Only a complete, feasible route is assessed for the way back.
-      walkBack: error ? null : walkBack(terrain, points[0], samples),
-    }
-  }, [terrain, points, roundTrip])
+  const service = useRef<PlanService | null>(null)
+  const [serviceReady, setServiceReady] = useState(0)
 
-  const targets = Math.max(points.length - 1, 0)
-  const evaSeconds = plan ? plan.walkTime + targets * stopMinutes * 60 : 0
+  // One planning service per terrain.
+  useEffect(() => {
+    if (!terrain) return
+    const s = new PlanService({
+      terrain,
+      createWorker: () =>
+        new Worker(new URL('../lib/planner.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike,
+      onUpdate: (u) => {
+        setResult(u)
+        if (u.done) setPending(false)
+      },
+    })
+    service.current = s
+    setServiceReady((n) => n + 1)
+    return () => {
+      s.dispose()
+      service.current = null
+    }
+  }, [terrain])
+
+  // Ask for new routes whenever something that shapes them changes.
+  useEffect(() => {
+    const s = service.current
+    if (!s) return
+    if (points.length < 2) {
+      s.cancel()
+      setResult(null)
+      setPending(false)
+      return
+    }
+    const input: PlanInput = { points, roundTrip, massKg }
+    setPending(true)
+    s.request(input, modeRef.current)
+  }, [serviceReady, points, roundTrip, massKg])
+
+  // A result is shown only for the checkpoints it was computed for.
+  const fresh = result && result.input.points === points ? result : null
+  const plan: Plan | null = fresh?.plans[mode] ?? null
+
+  const comparison = useMemo(() => {
+    const out = {} as Record<RouteMode, ModeSummary | null>
+    for (const m of ROUTE_MODES) out[m.id] = fresh ? summarise(fresh.plans[m.id], fresh.input, stopMinutes) : null
+    return out
+  }, [fresh, stopMinutes])
+
+  const selected = comparison[mode]
+  const evaSeconds = selected?.evaSeconds ?? 0
   const doseMsv = (RADIATION.doseEquivalent_mSv_per_day * evaSeconds) / 86400
   const energyKcal = plan ? (plan.energyPerKg * massKg + plan.energyFixed) / 4184 : 0
-
-  // Mission-level checks apply only to a feasible route.
-  const checks: Check[] | null = plan && !plan.error ? buildChecks({ evaSeconds, walkBack: plan.walkBack }) : null
-  const go = checks ? checks.every((c) => c.ok) : false
+  // Mission-level checks apply only to a feasible route, and are the same for every priority.
+  const checks = selected?.checks ?? null
+  const go = selected?.verdict === 'go'
 
   return {
     points,
@@ -124,7 +114,12 @@ export function usePlan(terrain: Terrain | null) {
     setStopMinutes,
     massKg,
     setMassKg,
+    mode,
+    setMode,
+    /** True while routes for the current checkpoints are still being computed. */
+    pending: pending && points.length >= 2,
     plan,
+    comparison,
     checks,
     go,
     evaSeconds,

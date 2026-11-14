@@ -114,7 +114,9 @@ export default function MobileSheet({ plan, snap, onSnap, tab, onTab, marked, ch
             </>
           ) : (
             <span className="sheet-hint">
-              {verdict === 'noroute'
+              {plan.pending
+                ? 'Calculating routes…'
+                : verdict === 'noroute'
                 ? 'A checkpoint cannot be reached.'
                 : plan.points.length === 0
                   ? 'Tap the map to choose a habitat site.'

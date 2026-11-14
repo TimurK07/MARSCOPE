@@ -331,3 +331,111 @@
 .limits .bad .limit-margin {
   color: var(--nogo);
 }
+
+/* route priority */
+.m-mode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px var(--pad);
+  border-top: 1px solid var(--line);
+}
+.m-mode .seg button {
+  min-height: 28px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* comparison of the three priorities */
+.cmp table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--fs-sm);
+}
+.cmp th,
+.cmp td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  font-weight: 400;
+}
+.cmp tbody th {
+  width: 34%;
+  padding-left: 0;
+  color: var(--text-2);
+  text-align: left;
+}
+.cmp tbody th[title] {
+  text-decoration: underline dotted var(--text-3);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.cmp td {
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.cmp thead button {
+  width: 100%;
+  padding: 3px 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-align: right;
+  cursor: pointer;
+}
+.cmp thead button:hover {
+  color: var(--text);
+}
+.cmp thead .is-on button {
+  color: var(--accent-hi);
+  border-bottom-color: var(--accent);
+}
+.cmp td.is-on {
+  background: var(--accent-wash);
+  color: var(--text);
+}
+.cmp td.is-min {
+  text-decoration: underline;
+  text-decoration-color: var(--text-3);
+  text-underline-offset: 3px;
+}
+.cmp td.v-go {
+  color: var(--go);
+}
+.cmp td.v-nogo,
+.cmp td.v-noroute {
+  color: var(--nogo);
+}
+.cmp-note {
+  margin-top: 10px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.cmp-note b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* touch: larger targets for the priority controls */
+.is-mobile .m-mode .seg button,
+.is-mobile .cmp thead button {
+  min-height: 40px;
+}
+@media (pointer: coarse) {
+  .m-mode .seg button,
+  .cmp thead button {
+    min-height: 40px;
+  }
+}

@@ -30,7 +30,8 @@ The local view is a map-first workspace: a tool rail on the left, the map in the
   - **Terrain profile**: the elevation profile of the route, coloured by slope class and linked to the map.
   - **Point**: click anywhere to read coordinates, elevation, slope class and geologic unit, then set the habitat or add a science target.
   - **Surface view**: the Navcam frames Curiosity took at a selected stop, with local solar time and camera azimuth.
-- **Safe route planner.** The fastest walking route that never crosses terrain steeper than NASA's 20° limit. The staircase a grid search gives is straightened only where the straight line stays on walkable ground, is no slower, and crosses no more hidden steep ground. Checkpoints can be dragged, reordered and removed, with undo.
+- **Slope-limited route planner.** The fastest walking route over the terrain grid that never crosses a cell steeper than NASA's 20° limit. The staircase a grid search gives is straightened only where the straight line stays on walkable ground, is no slower, and crosses no more hidden steep ground. Checkpoints can be dragged, reordered and removed, with undo.
+- **Three route priorities.** Fastest, Energy-efficient and Cautious routes for the same checkpoints, compared side by side: distance, walking time, walking energy and hidden steep ground. All three obey the same slope limit and the same mission checks; Walking energy is an approximation adapted from research on Earth (Santee et al. 2001), scaled to Mars gravity. Cautious uses a heuristic weight of ours, not a NASA-certified safety model. Each route is optimal on the 4 m grid for its own objective; the straightened route is not proven optimal, and no priority guarantees safety. Routes are computed in a Web Worker.
 - **Mission status.** STANDBY, GO, NO-GO or NO ROUTE, always visible with distance, EVA duration, climb and energy. On NO-GO the panel names the failed constraint and says what would fix it, for example the longest stop time that still fits the 8-hour limit.
 - **Mobile.** A full-screen map with a bottom sheet that snaps to three heights.
 - **Conditions at Gale.** The latest weather report from Curiosity's REMS station.
@@ -43,6 +44,8 @@ app/                 Web app (Vite + React + TypeScript + Leaflet), no backend
   src/lib/router.ts  A* least-time route search over the terrain grid, walk-back search
   src/lib/pathGeometry.ts Line-of-sight checks, path measuring, safe straightening
   src/lib/mission.ts GO / NO-GO checks
+  src/lib/objectives.ts The three route priorities and their cost functions
+  src/lib/planner.ts Whole-plan computation for all priorities (also runs in planner.worker.ts)
   src/lib/overlays.ts Slope hazard, elevation tint and contour rasters
   src/lib/advice.ts  Plain-language guidance for a NO-GO plan
   src/lib/globe.ts   Mars sphere geometry: coordinates, great circles, altitude and zoom
