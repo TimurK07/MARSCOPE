@@ -3,12 +3,24 @@
 Source: MRO HiRISE "Gale Crater DEM" (1 m posts, layer Gale_DEM_SMG_1m), served
 by NASA JPL Mars Trek as an ArcGIS ImageServer.
 
-Two exports of the same DEM are used:
+One export of the DEM is used: the source grid, 4096 x 4096 pixels of about 1 m
+(1.009 m; the DEM's own posts are 1.000 m), fetched as 16 tiles. Everything else
+is derived from it here:
 
-  routing grid  1024 x 1024 cells of about 4 m. Elevation and slope on this grid
-                drive the route search and the hard 20 degree limit.
-  source grid   4096 x 4096 pixels of about 1 m, exactly 4 x 4 per routing cell.
-                Used only to measure how much steep ground hides inside a cell.
+  routing grid  1024 x 1024 cells of about 4 m. The elevation of a cell is the
+                mean of its own 4 x 4 source pixels, so it describes exactly the
+                ground the cell covers. Slope is computed on that grid and drives
+                the route search and the hard 20 degree limit.
+  subcell grid  per routing cell, how many of its 16 source pixels are steeper
+                than the limit. Used only to show what the 4 m grid hides.
+
+Why the routing grid is not requested from the server: asked for the whole area
+at 1024 x 1024, the server does not return the value at each cell centre. It
+returns the value at the centre of the north-west source pixel of each cell,
+1.5 m north and 1.5 m west of where the cell is. That put elevation and slope out
+of step with the subcell grid, the imagery and every coordinate in the app. The
+near-native 4096 x 4096 export is placed correctly (checked against the DEM's
+native pixels), so the routing grid is now built from it.
 
 Usage:
     python scripts/prepare_terrain.py
@@ -19,12 +31,17 @@ Outputs (app/public/data/gale/):
     subcell.bin        uint8 pairs per cell: [steep source pixels, valid source pixels], each 0..16
     meta.json          grid geometry, scales and provenance
 
+Scales, for reading the numbers
+    Cell slope is a central difference between neighbouring cells: a baseline of
+    two cells, about 8 m. Subcell slope is the same over two source pixels, about
+    2 m. The step between two cells that the planner also limits is about 4 m
+    (5.7 m diagonally).
+
 What the data can and cannot show
     The DEM is a stereo product with 1 m posts; features smaller than a few metres
-    (rocks, ledges, loose ground) are not resolved, and the server resamples it to
-    our grids. The subcell metric counts 1 m pixels steeper than the limit. It is a
-    measure of how rough a cell is, not a probability of a fall, and it cannot find
-    hazards the DEM does not contain.
+    (rocks, ledges, loose ground) are not resolved. The subcell metric counts 1 m
+    pixels steeper than the limit. It is a measure of how rough a cell is, not a
+    probability of a fall, and it cannot find hazards the DEM does not contain.
 """
 
 from __future__ import annotations
@@ -155,49 +172,85 @@ def subcell_counts(src: np.ndarray, cell_y: float, cell_x: float, sub: int = SUB
     return blocks(steep), blocks(ok)
 
 
-def main() -> None:
-    t0 = time.time()
-    raw_path = RAW_DIR / "gale_dem_patch.tif"
-    url = export_url(WEST, SOUTH, EAST, NORTH, SIZE)
-    fetch(url, raw_path)
-    dem = read_tiff(raw_path)
-    assert dem.shape == (SIZE, SIZE), dem.shape
+def block_mean(src: np.ndarray, sub: int = SUB) -> tuple[np.ndarray, np.ndarray]:
+    """Routing-grid elevation: the mean of each cell's own sub x sub source pixels.
 
-    valid = valid_mask(dem)
-    print(f"valid cells: {valid.mean() * 100:.2f}%")
+    Returns (elevation, valid). A cell is valid only if every one of its source
+    pixels is: a cell that is partly unknown is not given a height from the part
+    that happens to be known. Invalid cells come back as NaN.
+    """
+    rows, cols = src.shape[0] // sub, src.shape[1] // sub
+    ok = valid_mask(src).reshape(rows, sub, cols, sub).all(axis=(1, 3))
+    blocks = np.where(valid_mask(src), src, 0.0).reshape(rows, sub, cols, sub)
+    mean = blocks.mean(axis=(1, 3))
+    return np.where(ok, mean, np.nan), ok
+
+
+def encode_elevation(dem: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, float, float]:
+    """Elevation in ELEV_SCALE steps above the lowest valid cell. Invalid cells are stored as 0."""
     elev_min = float(dem[valid].min())
     elev_max = float(dem[valid].max())
-    print(f"elevation range: {elev_min:.1f} .. {elev_max:.1f} m")
     assert (elev_max - elev_min) / ELEV_SCALE < 65535, "relief does not fit the elevation encoding"
+    filled = np.where(valid, dem, elev_min)
+    u16 = np.clip(np.round((filled - elev_min) / ELEV_SCALE), 0, 65535).astype("<u2")
+    assert np.abs(u16[valid] * ELEV_SCALE + elev_min - dem[valid]).max() <= ELEV_SCALE / 2 + 1e-9
+    return u16, elev_min, elev_max
 
-    # Cell size in metres. Rows run north -> south, columns west -> east.
+
+def cell_slope(dem: np.ndarray, valid: np.ndarray, cell_y: float, cell_x: float) -> np.ndarray:
+    """Slope of the routing grid in degrees: a central difference between neighbouring cells.
+
+    Invalid cells are filled with the lowest elevation first. That makes the slope
+    next to missing data very large, so ground beside a hole is never read as gentle.
+    """
+    filled = np.where(valid, dem, float(dem[valid].min()))
+    return slope_degrees(filled, cell_y, cell_x)
+
+
+def encode_slope(slope_deg: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """Slope in SLOPE_SCALE steps, rounded up; SLOPE_NODATA where there is no data."""
+    u16 = np.minimum(np.ceil(slope_deg / SLOPE_SCALE - 1e-9), SLOPE_NODATA - 1).astype("<u2")
+    u16[~valid] = SLOPE_NODATA
+    # The encoding must be conservative everywhere there is data.
+    assert np.all(u16[valid] * SLOPE_SCALE >= slope_deg[valid] - 1e-6)
+    return u16
+
+
+def cell_size_m() -> tuple[float, float]:
+    """Size of a routing cell in metres (east-west, north-south). Rows run north -> south."""
     lat_mid = math.radians((SOUTH + NORTH) / 2)
     m_per_deg = math.pi * MARS_RADIUS_M / 180.0
     cell_y = (NORTH - SOUTH) / SIZE * m_per_deg
     cell_x = (EAST - WEST) / SIZE * m_per_deg * math.cos(lat_mid)
+    return cell_x, cell_y
+
+
+def main() -> None:
+    t0 = time.time()
+    cell_x, cell_y = cell_size_m()
     print(f"cell size: {cell_x:.3f} m (E-W) x {cell_y:.3f} m (N-S)")
 
-    filled = np.where(valid, dem, elev_min)
-    slope_deg = slope_degrees(filled, cell_y, cell_x)
+    # The source grid, and the routing grid as the mean of each cell's own 4 x 4 pixels.
+    src = load_source()
+    dem, valid = block_mean(src)
+    assert dem.shape == (SIZE, SIZE), dem.shape
+    print(f"valid cells: {valid.mean() * 100:.2f}%")
+
+    elev_u16, elev_min, elev_max = encode_elevation(dem, valid)
+    print(f"elevation range: {elev_min:.1f} .. {elev_max:.1f} m")
+
+    slope_deg = cell_slope(dem, valid, cell_y, cell_x)
     print(
         "slope percentiles (50/90/99): "
         + ", ".join(f"{np.percentile(slope_deg[valid], p):.1f}" for p in (50, 90, 99))
     )
-
-    elev_u16 = np.clip(np.round((filled - elev_min) / ELEV_SCALE), 0, 65535).astype("<u2")
-    assert np.abs(elev_u16[valid] * ELEV_SCALE + elev_min - dem[valid]).max() <= ELEV_SCALE / 2 + 1e-9
-
-    slope_u16 = np.minimum(np.ceil(slope_deg / SLOPE_SCALE - 1e-9), SLOPE_NODATA - 1).astype("<u2")
-    slope_u16[~valid] = SLOPE_NODATA
-    # The encoding must be conservative everywhere there is data.
-    assert np.all(slope_u16[valid] * SLOPE_SCALE >= slope_deg[valid] - 1e-6)
+    slope_u16 = encode_slope(slope_deg, valid)
     above = int(((slope_deg > SLOPE_LIMIT_DEG) & valid).sum())
     read_above = int(((slope_u16 * SLOPE_SCALE > SLOPE_LIMIT_DEG) & valid).sum())
     assert read_above >= above
     print(f"cells above {SLOPE_LIMIT_DEG:g} deg: {above} true, {read_above} as stored")
 
-    # Steep ground hidden inside cells, from the 1 m source grid.
-    src = load_source()
+    # Steep ground hidden inside cells, from the same source pixels.
     steep, ok = subcell_counts(src, cell_y, cell_x)
     walkable = valid & (slope_deg <= SLOPE_LIMIT_DEG)
     some = walkable & (steep > 0)
@@ -243,10 +296,16 @@ def main() -> None:
             "note": "Derived metric: count of ~1 m source pixels in each cell whose slope exceeds the limit. Not a hazard probability.",
         },
         "crs": "Mars 2000 sphere (ESRI:104905), planetocentric lat, east-positive lon",
+        "method": {
+            "elevation": f"mean of each cell's {SUB} x {SUB} source pixels",
+            "slope": "central difference between neighbouring cells (two-cell baseline), in degrees, stored rounded up",
+            "sourceGrid": f"{SRC} x {SRC} pixels over the same bounding box, exported in 16 tiles with bilinear interpolation",
+        },
         "source": {
             "dataset": "MRO HiRISE, Gale Crater DEM (Gale_DEM_SMG_1m), 1 m/px",
             "provider": "NASA JPL Mars Trek",
-            "url": url,
+            "url": export_url(WEST, NORTH - (NORTH - SOUTH) / 4, WEST + (EAST - WEST) / 4, NORTH, SRC // 4),
+            "urlNote": "first of 16 tiles (4 x 4, north-west first); the others shift the bbox by a quarter of the area",
             "retrieved": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         },
     }

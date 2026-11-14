@@ -13,8 +13,8 @@
   "elevation": {
     "file": "elevation_2cm.bin",
     "dtype": "uint16-le",
-    "min_m": -3865.4501953125,
-    "max_m": -2941.903564453125,
+    "min_m": -3865.1609802246094,
+    "max_m": -2941.8079376220703,
     "scale_m": 0.02
   },
   "slope": {
@@ -32,10 +32,16 @@
     "note": "Derived metric: count of ~1 m source pixels in each cell whose slope exceeds the limit. Not a hazard probability."
   },
   "crs": "Mars 2000 sphere (ESRI:104905), planetocentric lat, east-positive lon",
+  "method": {
+    "elevation": "mean of each cell's 4 x 4 source pixels",
+    "slope": "central difference between neighbouring cells (two-cell baseline), in degrees, stored rounded up",
+    "sourceGrid": "4096 x 4096 pixels over the same bounding box, exported in 16 tiles with bilinear interpolation"
+  },
   "source": {
     "dataset": "MRO HiRISE, Gale Crater DEM (Gale_DEM_SMG_1m), 1 m/px",
     "provider": "NASA JPL Mars Trek",
-    "url": "https://trek.nasa.gov/mars/trekarcgis/rest/services/Gale_DEM_SMG_1m/ImageServer/exportImage?bbox=137.355%2C-4.86%2C137.425%2C-4.79&bboxSR=104905&size=1024%2C1024&format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image",
+    "url": "https://trek.nasa.gov/mars/trekarcgis/rest/services/Gale_DEM_SMG_1m/ImageServer/exportImage?bbox=137.355%2C-4.8075%2C137.3725%2C-4.79&bboxSR=104905&size=1024%2C1024&format=tiff&pixelType=F32&interpolation=RSP_BilinearInterpolation&f=image",
+    "urlNote": "first of 16 tiles (4 x 4, north-west first); the others shift the bbox by a quarter of the area",
     "retrieved": "2026-11-14"
   }
 }

@@ -44,7 +44,10 @@ const spare = (ok: boolean, text: string) => (ok ? `${text} to spare` : `over by
 const kmUp = (m: number) => `${(Math.ceil(m / 10 - 1e-9) / 100).toFixed(2)} km`
 const minUp = (s: number) => `${Math.ceil(s / 60 - 1e-9)} min`
 function distanceMargin(d: number, limit: number): string {
-  if (d > limit) return `over by ${Math.max(1, Math.ceil(d - limit))} m`
+  if (d > limit) {
+    const over = Math.max(1, Math.ceil(d - limit))
+    return over >= 1000 ? `over by ${(Math.ceil(over / 10) / 100).toFixed(2)} km` : `over by ${over} m`
+  }
   const room = Math.floor(limit - d)
   return room < 1 ? 'less than 1 m to spare' : room >= 1000 ? `${(Math.floor(room / 10) / 100).toFixed(2)} km to spare` : `${room} m to spare`
 }

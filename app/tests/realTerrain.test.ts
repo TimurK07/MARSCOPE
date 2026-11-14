@@ -120,4 +120,68 @@ describe('real terrain', () => {
     // Cells over the limit at 4 m are, on average, mostly steep at 1 m too: the two grids agree.
     expect(blockedShare / blockedCells).toBeGreaterThan(0.5)
   })
+
+  describe('one grid, in one place', () => {
+    // Elevation, slope and the 1 m steepness counts must describe the same ground.
+    // The earlier grid held elevation sampled 1.5 m north-west of each cell; these fail on it.
+    const w = t.width
+    const h = t.height
+    const cx = t.meta.cellSizeX_m
+    const cy = t.meta.cellSizeY_m
+    const zAt = (x: number, y: number) => elevationAt(t, y * w + x)
+
+    it('records how the grid was built', () => {
+      const method = (t.meta as unknown as { method?: { elevation: string; slope: string } }).method
+      expect(method?.elevation).toContain('mean of each cell')
+      expect(method?.slope).toContain('central difference')
+    })
+
+    it('stores the slope of the elevation it ships with', () => {
+      // Central difference between neighbouring cells, recomputed here from the elevation grid.
+      // Elevation is in 2 cm steps, which can move a slope over 8 m by 0.21 degrees; storage rounds up by 0.01.
+      let worst = 0
+      let checked = 0
+      for (let y = 1; y < h - 1; y += 3) {
+        for (let x = 1; x < w - 1; x += 3) {
+          const gx = (zAt(x + 1, y) - zAt(x - 1, y)) / (2 * cx)
+          const gy = (zAt(x, y + 1) - zAt(x, y - 1)) / (2 * cy)
+          const deg = (Math.atan(Math.hypot(gx, gy)) * 180) / Math.PI
+          const diff = Math.abs(slopeAt(t, y * w + x) - deg)
+          if (diff > worst) worst = diff
+          checked++
+        }
+      }
+      expect(checked).toBeGreaterThan(100_000)
+      expect(worst).toBeLessThan(0.23)
+    })
+
+    it('is over the limit where its own 1 m pixels are, not a pixel or two away', () => {
+      // A cell over the limit almost always has steep 1 m pixels of its own. With the
+      // misplaced grid 0.72 % of blocked cells had none; with grids in step it is under 0.2 %.
+      let blocked = 0
+      let withoutSteepPixel = 0
+      for (let i = 0; i < w * h; i++) {
+        if (slopeAt(t, i) > MAX_SLOPE_DEG) {
+          blocked++
+          if (hiddenSteepShare(t, i) === 0) withoutSteepPixel++
+        }
+      }
+      expect(blocked).toBeGreaterThan(200_000)
+      expect(withoutSteepPixel / blocked).toBeLessThan(0.002)
+    })
+
+    it('puts a cell\'s values at the cell\'s own centre on the map', () => {
+      // The app draws overlays over the bounding box and reads a cell at its centre.
+      // Centre -> cell -> centre must come back to the same place for every cell tried.
+      const b = t.meta.bbox
+      for (const [x, y] of [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1], [511, 512], [137, 901]]) {
+        const lon = b.west + ((x + 0.5) / w) * (b.east - b.west)
+        const lat = b.north - ((y + 0.5) / h) * (b.north - b.south)
+        expect(cellAt(t, { lat, lon })).toBe(y * w + x)
+      }
+      // Row 0 is the northern edge and column 0 the western edge.
+      expect(cellAt(t, { lat: b.north - 1e-9, lon: b.west + 1e-9 })).toBe(0)
+      expect(cellAt(t, { lat: b.south + 1e-9, lon: b.east - 1e-9 })).toBe(w * h - 1)
+    })
+  })
 })

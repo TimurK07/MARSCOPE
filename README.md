@@ -23,7 +23,7 @@ The local view is a map-first workspace: a tool rail on the left, the map in the
 - **Mission map.** HiRISE, CTX and Viking imagery of the site, with the planned route, Curiosity's traverse and the crew's checkpoints drawn on top. The map takes about three quarters of the screen.
 - **Tool rail and data panes.** Map layers, environment, scientific context and sources open as panes over the map. Each layer has a description, a legend, a switch and an opacity control.
 - **Hidden steep ground.** A 4 m cell can average out to a walkable slope and still contain steep ground. From the 1 m DEM we count, per cell, the pixels steeper than 20° and show that as a layer, in the point inspector and along the route. It is an indicator, not a hazard probability.
-- **Slope hazard layer.** We compute slope from the 1 m DEM. By default only ground that restricts walking is drawn (steep as a tint, no-go as a hatch), so the imagery stays readable.
+- **Slope hazard layer.** Slope is computed on the 4 m routing grid (between neighbouring cells, an 8 m baseline), which is built from the 1 m DEM. By default only ground that restricts walking is drawn (steep as a tint, no-go as a hatch), so the imagery stays readable.
 - **Elevation tint and contours**, painted in the browser from the same DEM.
 - **Scale-aware regional layers.** THEMIS thermal infrared (100 m/px) and the USGS global geologic map (1:20M) are too coarse for a 4 km site, so the app hides them at site scale and offers a Gale crater view where they read correctly.
 - **Bottom dock** with three tabs. It can be resized, expanded and collapsed.
@@ -96,13 +96,15 @@ The first run downloads about 70 MB of DEM tiles into `data/raw/` (not committed
 
 ## How the route model works
 
-The study area is a 1024 × 1024 grid (about 4 m per cell) cut from the MRO HiRISE Gale Crater DEM. Each step between cells costs the time a suited astronaut needs to walk it:
+The study area is a 1024 × 1024 grid of about 4 m cells built from the MRO HiRISE Gale Crater DEM (1 m posts). The elevation of each cell is the mean of its own 4 × 4 DEM pixels, so the grid, the 1 m steepness counts and the imagery describe the same ground. Slope is the difference between neighbouring cells, an 8 m baseline. Each step between cells costs the time a suited astronaut needs to walk it:
 
 - **Walking speed vs slope** follows Marquez (2008), derived from Apollo traverse data, as implemented in the SEXTANT planner used by NASA's BASALT programme.
 - **Metabolic cost** follows Santee et al. (2001), with Mars gravity of 3.73 m/s². It covers walking only; work at the targets is not modelled.
 - **Slope limit of 20°** and **EVA duration of 8 hours** are suit capabilities listed in NASA EVA-EXP-0075, a 2020 summary of the Artemis lunar EVA concept of operations. Using them for Mars is our assumption. The 20° limit applies to every cell and to every step actually walked: a step between two cells is refused when the rise between them, over the horizontal length of the step, is steeper than 20°, even if both cells read as walkable. Straightened routes are checked the same way, move by move and piece by piece. The route never clips no-go cells diagonally, slope is stored rounded up, and cells without data are not walkable.
 - **Return to the habitat.** From every point of the route there must be one way back that is no longer than 2 km and takes no more than 60 minutes. Both limits are judged on the same path: the shortest way back and the fastest way back are usually different paths, so checking each limit on its own best path would be wrong in both directions. The planner decides this exactly (a shortest-path search with a resource constraint) and uses the same answer for all three priorities. **The 2 km and 60 minutes are MARSCOPE planning assumptions, set in `model.ts`, not NASA requirements for Mars.** They are adapted from the same NASA document: lunar walking excursions within a 2 km radius, about 2 km/h, one hour of secondary oxygen.
 - **Radiation**: 0.67 mSv/day, the average galactic cosmic ray dose equivalent Curiosity's RAD measured in Gale crater (Hassler et al., 2014), compared with the 600 mSv career limit of NASA-STD-3001.
+
+- **Walking time is an estimate at the scale of the grid.** Times are measured in pieces of 4 to 6 m. The same routes measured in 1 m pieces on the 1 m DEM come out 5 to 15 % longer, because the speed model drops to 0.05 m/s above 15° and shorter pieces cross that threshold more often. This is a property of the model, not a more accurate figure; energy moves by 1 to 4 % and distance not at all.
 
 The suited mass and the time spent at each target are planning inputs the user sets. Links to every source are in the app and in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
 

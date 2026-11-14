@@ -132,6 +132,9 @@ describe('return figures at the limits', () => {
     // 2000.3 m is over; it must not read "2.00 km".
     expect(dist(D + 0.3).value).toBe('2.01 km')
     expect(dist(D + 0.3).margin).toBe('over by 1 m')
+    expect(dist(4317.9).margin).toBe('over by 2.32 km')
+    expect(dist(2999.5).margin).toBe('over by 1.00 km')
+    expect(dist(2998.9).margin).toBe('over by 999 m')
     expect(time(T + 0.5).value).toBe('61 min')
     expect(time(T + 0.5).margin).toBe('over by 1 min')
   })
