@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+build/
+.vite/
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Raw downloaded datasets (too large for git; processed output goes to the repo)
+data/raw/
+
+# Editors
+.vscode/
+.idea/
