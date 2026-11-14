@@ -22,6 +22,7 @@ The local view is a map-first workspace: a tool rail on the left, the map in the
 
 - **Mission map.** HiRISE, CTX and Viking imagery of the site, with the planned route, Curiosity's traverse and the crew's checkpoints drawn on top. The map takes about three quarters of the screen.
 - **Tool rail and data panes.** Map layers, environment, scientific context and sources open as panes over the map. Each layer has a description, a legend, a switch and an opacity control.
+- **Hidden steep ground.** A 4 m cell can average out to a walkable slope and still contain steep ground. From the 1 m DEM we count, per cell, the pixels steeper than 20° and show that as a layer, in the point inspector and along the route. It is an indicator, not a hazard probability.
 - **Slope hazard layer.** We compute slope from the 1 m DEM. By default only ground that restricts walking is drawn (steep as a tint, no-go as a hatch), so the imagery stays readable.
 - **Elevation tint and contours**, painted in the browser from the same DEM.
 - **Scale-aware regional layers.** THEMIS thermal infrared (100 m/px) and the USGS global geologic map (1:20M) are too coarse for a 4 km site, so the app hides them at site scale and offers a Gale crater view where they read correctly.
@@ -29,7 +30,7 @@ The local view is a map-first workspace: a tool rail on the left, the map in the
   - **Terrain profile**: the elevation profile of the route, coloured by slope class and linked to the map.
   - **Point**: click anywhere to read coordinates, elevation, slope class and geologic unit, then set the habitat or add a science target.
   - **Surface view**: the Navcam frames Curiosity took at a selected stop, with local solar time and camera azimuth.
-- **Safe route planner.** The fastest walking route that never crosses terrain steeper than NASA's 20° limit. Checkpoints can be dragged, reordered and removed, with undo.
+- **Safe route planner.** The fastest walking route that never crosses terrain steeper than NASA's 20° limit. The staircase a grid search gives is straightened only where the straight line stays on walkable ground, is no slower, and crosses no more hidden steep ground. Checkpoints can be dragged, reordered and removed, with undo.
 - **Mission status.** STANDBY, GO, NO-GO or NO ROUTE, always visible with distance, EVA duration, climb and energy. On NO-GO the panel names the failed constraint and says what would fix it, for example the longest stop time that still fits the 8-hour limit.
 - **Mobile.** A full-screen map with a bottom sheet that snaps to three heights.
 - **Conditions at Gale.** The latest weather report from Curiosity's REMS station.
@@ -39,7 +40,9 @@ The local view is a map-first workspace: a tool rail on the left, the map in the
 ```
 app/                 Web app (Vite + React + TypeScript + Leaflet), no backend
   src/lib/model.ts   Physical model: every constant with its source
-  src/lib/router.ts  A* least-time route search over the terrain grid
+  src/lib/router.ts  A* least-time route search over the terrain grid, walk-back search
+  src/lib/pathGeometry.ts Line-of-sight checks, path measuring, safe straightening
+  src/lib/mission.ts GO / NO-GO checks
   src/lib/overlays.ts Slope hazard, elevation tint and contour rasters
   src/lib/advice.ts  Plain-language guidance for a NO-GO plan
   src/lib/globe.ts   Mars sphere geometry: coordinates, great circles, altitude and zoom
@@ -50,7 +53,8 @@ app/                 Web app (Vite + React + TypeScript + Leaflet), no backend
   src/styles/        Design tokens and styles by workspace area
   public/data/gale/  Terrain grids produced by the script below
 scripts/
-  prepare_terrain.py Downloads the DEM patch from NASA Mars Trek and computes slope
+  prepare_terrain.py Downloads the DEM from NASA Mars Trek; builds elevation, slope and hidden-steepness grids
+  test_prepare_terrain.py Checks for that maths
   fetch_globe_assets.py Downloads the globe's first texture and the feature names
 docs/
   DATA_SOURCES.md    Every NASA dataset and endpoint we use, with links
@@ -80,7 +84,10 @@ The prepared terrain grids are already in the repository. To regenerate them fro
 python3 -m venv .venv
 .venv/bin/pip install -r scripts/requirements.txt
 .venv/bin/python scripts/prepare_terrain.py
+.venv/bin/python scripts/test_prepare_terrain.py
 ```
+
+The first run downloads about 70 MB of DEM tiles into `data/raw/` (not committed) and can take a while; later runs reuse them.
 
 ## How the route model works
 

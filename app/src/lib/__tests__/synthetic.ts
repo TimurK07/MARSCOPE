@@ -10,7 +10,14 @@ const NODATA = 65535
  * Builds a terrain from per-cell values.
  * slope: degrees (NaN = no data). elevation: metres (default 0).
  */
-export function makeTerrain(width: number, height: number, slope: (x: number, y: number) => number, elevation: (x: number, y: number) => number = () => 0): Terrain {
+export function makeTerrain(
+  width: number,
+  height: number,
+  slope: (x: number, y: number) => number,
+  elevation: (x: number, y: number) => number = () => 0,
+  /** Steep 1 m source pixels in each cell, 0..16. Omit for terrain without subcell data. */
+  hiddenSteep?: (x: number, y: number) => number,
+): Terrain {
   const elevRaw = new Uint16Array(width * height)
   const slopeRaw = new Uint16Array(width * height)
   for (let y = 0; y < height; y++) {
@@ -21,11 +28,18 @@ export function makeTerrain(width: number, height: number, slope: (x: number, y:
       elevRaw[y * width + x] = Math.round(elevation(x, y) / 0.1)
     }
   }
+  const sub = hiddenSteep
+    ? {
+        subSteep: Uint8Array.from({ length: width * height }, (_, i) => hiddenSteep(i % width, Math.floor(i / width))),
+        subValid: new Uint8Array(width * height).fill(16),
+      }
+    : {}
   return {
     width,
     height,
     elevRaw,
     slopeRaw,
+    ...sub,
     meta: {
       name: 'synthetic',
       bbox: { west: 0, south: 0, east: (width * CELL) / M_PER_DEG, north: (height * CELL) / M_PER_DEG },

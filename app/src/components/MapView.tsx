@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { BASE_LAYERS, CRATER_VIEW, TILE_LAYERS, type TileLayerDef } from '../lib/layers'
-import { contourImage, elevationImage, hazardImage, type HazardMode } from '../lib/overlays'
+import { contourImage, elevationImage, hazardImage, hiddenSteepImage, type HazardMode } from '../lib/overlays'
 import { cellAt, elevationAt, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
 import type { RoverStop, RoverTrack } from '../lib/nasa'
 import type { RouteLeg } from '../lib/router'
@@ -36,6 +36,8 @@ interface Props {
   hazard: LayerState & { mode: HazardMode }
   elevation: LayerState
   contours: LayerState
+  /** Hidden steep ground, from the 1 m source DEM. */
+  hidden: LayerState
   showTrack: boolean
   track: RoverTrack | null
   points: LatLon[]
@@ -275,11 +277,12 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     }
     sync('elevation', props.elevation, 1, () => elevationImage(t))
     sync('contours', props.contours, 2, () => contourImage(t))
+    sync('hidden', props.hidden, 4, () => hiddenSteepImage(t))
     const modeChanged = hazardModeRef.current !== props.hazard.mode
     sync('hazard', props.hazard, 3, () => hazardImage(t, props.hazard.mode), modeChanged && props.hazard.on)
     if (props.hazard.on) hazardModeRef.current = props.hazard.mode
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.hazard, props.elevation, props.contours])
+  }, [props.hazard, props.elevation, props.contours, props.hidden])
 
   // Curiosity traverse: line, thinned stops, current position.
   const drawTrack = () => {

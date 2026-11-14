@@ -11,17 +11,25 @@
   "cellSizeX_m": 4.0376220796985125,
   "cellSizeY_m": 4.051981276007277,
   "elevation": {
-    "file": "elevation.bin",
+    "file": "elevation_2cm.bin",
     "dtype": "uint16-le",
     "min_m": -3865.4501953125,
     "max_m": -2941.903564453125,
-    "scale_m": 0.1
+    "scale_m": 0.02
   },
   "slope": {
     "file": "slope_cdeg.bin",
     "dtype": "uint16-le",
     "scale_deg": 0.01,
     "nodata": 65535
+  },
+  "subcell": {
+    "file": "subcell.bin",
+    "dtype": "uint8 pairs: steep, valid",
+    "pixelsPerCell": 16,
+    "limit_deg": 20.0,
+    "pixel_m": 1.0094055199246281,
+    "note": "Derived metric: count of ~1 m source pixels in each cell whose slope exceeds the limit. Not a hazard probability."
   },
   "crs": "Mars 2000 sphere (ESRI:104905), planetocentric lat, east-positive lon",
   "source": {

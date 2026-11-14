@@ -165,7 +165,7 @@
 }
 .insp-data {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: center;
   gap: 12px 24px;
   padding: 12px var(--pad);

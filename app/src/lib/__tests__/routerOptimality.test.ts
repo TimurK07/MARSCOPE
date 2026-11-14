@@ -1,4 +1,5 @@
 // A* must return the same travel time as an exhaustive search.
+// Compared before straightening: straightening can only make a route quicker.
 import { describe, expect, it } from 'vitest'
 import { MAX_SLOPE_DEG, walkingSpeedMs } from '../model'
 import { findLeg, isWalkable } from '../router'
@@ -64,7 +65,7 @@ describe('A* against exhaustive search', () => {
       const a = pick()
       const b = pick()
       const expected = dijkstraTime(t, a.x, a.y, b.x, b.y)
-      const got = findLeg(t, at(t, a.x, a.y), at(t, b.x, b.y))
+      const got = findLeg(t, at(t, a.x, a.y), at(t, b.x, b.y), { smooth: false })
       if (expected === Infinity) {
         expect(got.ok).toBe(false)
         unreachable++
@@ -85,7 +86,7 @@ describe('A* against exhaustive search', () => {
     const up = dijkstraTime(t, 2, 3, 17, 3)
     const down = dijkstraTime(t, 17, 3, 2, 3)
     expect(up).toBeGreaterThan(down)
-    const viaAstar = findLeg(t, at(t, 2, 3), at(t, 17, 3))
+    const viaAstar = findLeg(t, at(t, 2, 3), at(t, 17, 3), { smooth: false })
     expect(viaAstar.ok && viaAstar.leg.duration).toBeCloseTo(up, 2)
   })
 })

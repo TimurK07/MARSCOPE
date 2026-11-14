@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { MAX_SLOPE_DEG, MAX_SPEED_MS, walkingSpeedMs } from '../model'
-import { findLeg, isWalkable, walkBack } from '../router'
+import { findLeg as findRoute, isWalkable, walkBack } from '../router'
 import { at, CELL, cellOf, makeTerrain, rng } from './synthetic'
 import type { Terrain } from '../terrain'
+
+// These tests are about the grid search itself, so they look at its path before straightening.
+const findLeg: typeof findRoute = (t, a, b) => findRoute(t, a, b, { smooth: false })
 
 const N = 64
 const STEEP = MAX_SLOPE_DEG + 10

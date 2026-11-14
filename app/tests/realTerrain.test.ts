@@ -1,27 +1,29 @@
 // Safety invariants checked on the real Gale terrain grid.
 import { describe, expect, it } from 'vitest'
 import { MAX_SLOPE_DEG } from '../src/lib/model'
+import { lineCells } from '../src/lib/pathGeometry'
 import { findLeg, isWalkable, walkBack } from '../src/lib/router'
-import { cellAt, slopeAt } from '../src/lib/terrain'
+import { cellAt, elevationAt, hiddenSteepShare, slopeAt } from '../src/lib/terrain'
 import { EXAMPLE, loadTerrainFromDisk } from './loadTerrain'
 
 const t = loadTerrainFromDisk()
 
-function checkPath(path: { lat: number; lon: number }[]) {
+/** Every line of a route is re-checked independently of the code that built it. */
+function checkVertices(vertices: { lat: number; lon: number }[]) {
   const w = t.width
-  const cells = path.map((p) => cellAt(t, p))
-  for (let i = 0; i < cells.length; i++) {
-    expect(slopeAt(t, cells[i])).toBeLessThanOrEqual(MAX_SLOPE_DEG)
-    if (i === 0) continue
-    const ax = cells[i - 1] % w
-    const ay = Math.floor(cells[i - 1] / w)
-    const bx = cells[i] % w
-    const by = Math.floor(cells[i] / w)
-    if (ax !== bx && ay !== by) {
-      expect(isWalkable(t, ay * w + bx)).toBe(true)
-      expect(isWalkable(t, by * w + ax)).toBe(true)
-    }
+  const cells = vertices.map((p) => cellAt(t, p))
+  for (let i = 1; i < cells.length; i++) {
+    const a = cells[i - 1]
+    const b = cells[i]
+    const crossed = lineCells(t, a % w, Math.floor(a / w), b % w, Math.floor(b / w))
+    expect(crossed).not.toBeNull()
+    for (const c of crossed!) expect(slopeAt(t, c)).toBeLessThanOrEqual(MAX_SLOPE_DEG)
   }
+}
+
+function checkPath(path: { lat: number; lon: number }[]) {
+  // Samples of a straightened route are a few metres apart: each must lie on walkable ground.
+  for (const p of path) expect(isWalkable(t, cellAt(t, p))).toBe(true)
 }
 
 describe('real terrain', () => {
@@ -48,6 +50,11 @@ describe('real terrain', () => {
       expect(r.ok).toBe(true)
       if (!r.ok) return
       checkPath(r.leg.samples)
+      checkVertices(r.leg.vertices)
+      // Straightening may only help: never slower, never more hidden steep ground.
+      expect(r.leg.duration).toBeLessThanOrEqual(r.leg.grid.duration + 1e-6)
+      const raw = findLeg(t, seq[i], seq[i + 1], { smooth: false })
+      if (raw.ok) expect(r.leg.hiddenLoad!).toBeLessThanOrEqual(raw.leg.hiddenLoad! + 1e-9)
       samples.push(...r.leg.samples)
     }
     const back = walkBack(t, EXAMPLE[0], samples)!
@@ -69,7 +76,45 @@ describe('real terrain', () => {
       if (!r.ok) continue
       found++
       checkPath(r.leg.samples)
+      checkVertices(r.leg.vertices)
+      expect(r.leg.duration).toBeLessThanOrEqual(r.leg.grid.duration + 1e-6)
+      expect(r.leg.maxSlope).toBeLessThanOrEqual(MAX_SLOPE_DEG)
     }
     expect(found).toBeGreaterThan(0)
+  })
+
+  it('stores elevation in 2 cm steps that cover the whole relief', () => {
+    expect(t.meta.elevation.scale_m).toBe(0.02)
+    let max = 0
+    for (let i = 0; i < t.elevRaw.length; i += 97) if (t.elevRaw[i] > max) max = t.elevRaw[i]
+    expect(max).toBeLessThan(65535)
+    expect(elevationAt(t, 0)).toBeGreaterThan(-4000)
+    expect(elevationAt(t, 0)).toBeLessThan(-2900)
+  })
+
+  it('has a consistent hidden-steepness grid from the 1 m DEM', () => {
+    expect(t.subSteep!.length).toBe(t.width * t.height)
+    expect(t.subValid!.length).toBe(t.width * t.height)
+    let walkable = 0
+    let withHidden = 0
+    let blockedCells = 0
+    let blockedShare = 0
+    for (let i = 0; i < t.subSteep!.length; i++) {
+      expect(t.subValid![i]).toBeLessThanOrEqual(16)
+      expect(t.subSteep![i]).toBeLessThanOrEqual(t.subValid![i])
+      const share = hiddenSteepShare(t, i)
+      if (isWalkable(t, i)) {
+        walkable++
+        if (share) withHidden++
+      } else if (share != null) {
+        blockedCells++
+        blockedShare += share
+      }
+    }
+    // Some walkable cells hide steep ground, but they are a minority.
+    expect(withHidden / walkable).toBeGreaterThan(0.02)
+    expect(withHidden / walkable).toBeLessThan(0.4)
+    // Cells over the limit at 4 m are, on average, mostly steep at 1 m too: the two grids agree.
+    expect(blockedShare / blockedCells).toBeGreaterThan(0.5)
   })
 })

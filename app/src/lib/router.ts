@@ -5,30 +5,16 @@
 // slope exceeds the traversable limit are blocked.
 
 import { cellAt, cellCenter, elevationAt, slopeAt, type LatLon, type Terrain } from './terrain'
-import { MAX_SLOPE_DEG, MAX_SPEED_MS, segmentEnergy, walkingSpeedMs } from './model'
+import { MAX_SLOPE_DEG, MAX_SPEED_MS, walkingSpeedMs } from './model'
+import { measurePath, smoothPath, type PathMeasure, type PathSample } from './pathGeometry'
 
-export interface RouteSample extends LatLon {
-  /** Distance from the start of the route, metres (along the surface). */
-  dist: number
-  elevation: number
-  /** Grade along the direction of travel, degrees (positive = uphill). */
-  grade: number
-  /** Terrain slope at this cell, degrees. */
-  slope: number
-  /** Time from the start of the route, seconds. */
-  time: number
-}
+export type RouteSample = PathSample
 
-export interface RouteLeg {
-  samples: RouteSample[]
-  distance: number
-  duration: number
-  ascent: number
-  descent: number
-  maxSlope: number
-  /** Metabolic energy = energyPerKg * suited mass (kg) + energyFixed, joules. */
-  energyPerKg: number
-  energyFixed: number
+export interface RouteLeg extends PathMeasure {
+  /** Corner points of the route, joined by straight lines. */
+  vertices: LatLon[]
+  /** The same leg as the grid search found it, before straightening, for comparison. */
+  grid: { distance: number; duration: number; cells: number }
 }
 
 export type LegResult = { ok: true; leg: RouteLeg } | { ok: false; reason: string }
@@ -102,7 +88,12 @@ function canStep(t: Terrain, x: number, y: number, k: number): boolean {
   return isWalkable(t, y * t.width + (x + DX[k])) && isWalkable(t, (y + DY[k]) * t.width + x)
 }
 
-export function findLeg(t: Terrain, from: LatLon, to: LatLon): LegResult {
+export interface LegOptions {
+  /** Straighten the grid path where that is safe and no slower. On by default. */
+  smooth?: boolean
+}
+
+export function findLeg(t: Terrain, from: LatLon, to: LatLon, opts: LegOptions = {}): LegResult {
   const start = cellAt(t, from)
   const goal = cellAt(t, to)
   if (start < 0 || goal < 0) return { ok: false, reason: 'Point is outside the mapped study area.' }
@@ -165,48 +156,28 @@ export function findLeg(t: Terrain, from: LatLon, to: LatLon): LegResult {
   const cells: number[] = []
   for (let c = goal; c !== -1; c = came[c]) cells.push(c)
   cells.reverse()
-  return { ok: true, leg: buildLeg(t, cells) }
-}
 
-function buildLeg(t: Terrain, cells: number[]): RouteLeg {
-  const w = t.width
-  const cx = t.meta.cellSizeX_m
-  const cy = t.meta.cellSizeY_m
-  const samples: RouteSample[] = []
-  let dist = 0
-  let time = 0
-  let ascent = 0
-  let descent = 0
-  let maxSlope = 0
-  let energyPerKg = 0
-  let energyFixed = 0
-
-  for (let i = 0; i < cells.length; i++) {
-    const idx = cells[i]
-    const z = elevationAt(t, idx)
-    const slope = slopeAt(t, idx)
-    let grade = 0
-    if (i > 0) {
-      const prev = cells[i - 1]
-      const dxm = ((idx % w) - (prev % w)) * cx
-      const dym = (Math.floor(idx / w) - Math.floor(prev / w)) * cy
-      const d = Math.hypot(dxm, dym)
-      const dz = z - elevationAt(t, prev)
-      grade = (Math.atan2(dz, d) * 180) / Math.PI
-      const speed = walkingSpeedMs(grade)
-      const dt = d / speed
-      dist += Math.hypot(d, dz)
-      time += dt
-      const e = segmentEnergy(d, grade, speed)
-      energyPerKg += e.perKg
-      energyFixed += e.fixed
-      if (dz > 0) ascent += dz
-      else descent -= dz
+  const grid = measurePath(t, cells)
+  if (!grid) return { ok: false, reason: 'No safe route: the path found does not stay on walkable ground.' }
+  let chosen = grid
+  let vertices = cells
+  if (opts.smooth !== false) {
+    const straight = smoothPath(t, cells)
+    const m = measurePath(t, straight)
+    // Keep the straightened path only if it is safe and really no slower.
+    if (m && m.duration <= grid.duration + 1e-6) {
+      chosen = m
+      vertices = straight
     }
-    if (slope > maxSlope) maxSlope = slope
-    samples.push({ ...cellCenter(t, idx), dist, elevation: z, grade, slope, time })
   }
-  return { samples, distance: dist, duration: time, ascent, descent, maxSlope, energyPerKg, energyFixed }
+  return {
+    ok: true,
+    leg: {
+      ...chosen,
+      vertices: vertices.map((c) => cellCenter(t, c)),
+      grid: { distance: grid.distance, duration: grid.duration, cells: cells.length },
+    },
+  }
 }
 
 export interface WalkBack {

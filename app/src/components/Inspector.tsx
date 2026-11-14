@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchGeologicUnit, type GeologicUnit } from '../lib/geology'
 import { MAX_SLOPE_DEG, slopeClass, surfaceDistanceM } from '../lib/model'
-import { cellAt, elevationAt, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
+import { cellAt, elevationAt, hiddenSteepShare, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
 import { fmtKm, fmtLat, fmtLon } from '../hooks/usePlan'
 
 interface Props {
@@ -35,6 +35,7 @@ export default function Inspector({ terrain, point, habitat, targetCount, onSetH
   const slope = inside ? slopeAt(terrain, idx) : NaN
   const cls = Number.isNaN(slope) ? null : slopeClass(slope)
   const blocked = !inside || Number.isNaN(slope) || slope > MAX_SLOPE_DEG
+  const hidden = inside ? hiddenSteepShare(terrain, idx) : null
 
   return (
     <div className="insp">
@@ -63,6 +64,10 @@ export default function Inspector({ terrain, point, habitat, targetCount, onSetH
               '—'
             )}
           </dd>
+        </div>
+        <div title="Share of this cell's 1 m source pixels that are steeper than 20°. A roughness indicator from the HiRISE DEM, not a hazard probability.">
+          <dt>Hidden steep ground</dt>
+          <dd>{hidden == null ? '—' : hidden === 0 ? 'none detected at 1 m' : `${Math.round(hidden * 100)}% of 1 m pixels`}</dd>
         </div>
         <div>
           <dt>From habitat</dt>

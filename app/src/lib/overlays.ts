@@ -3,7 +3,7 @@
 // and do not change any value the planner uses.
 
 import { MAX_SLOPE_DEG, SLOPE_CLASSES } from './model'
-import { elevationAt, slopeAt, type Terrain } from './terrain'
+import { elevationAt, hiddenSteepShare, slopeAt, type Terrain } from './terrain'
 
 export type HazardMode = 'hazards' | 'classes'
 
@@ -100,5 +100,26 @@ export function contourImage(t: Terrain): string {
     out[o + 1] = 236
     out[o + 2] = 222
     out[o + 3] = index ? 210 : 105
+  })
+}
+
+/** Colour of the hidden steep ground overlay. */
+export const HIDDEN_RGB: [number, number, number] = [182, 140, 255]
+
+/**
+ * Walkable cells that contain steep ground at the ~1 m scale of the source DEM.
+ * Opacity follows the share of steep source pixels. Cells already over the hard
+ * limit are left to the slope hazard layer.
+ */
+export function hiddenSteepImage(t: Terrain): string {
+  return paint(t, (i, _x, _y, out, o) => {
+    const s = slopeAt(t, i)
+    if (Number.isNaN(s) || s > MAX_SLOPE_DEG) return
+    const share = hiddenSteepShare(t, i)
+    if (!share) return
+    out[o] = HIDDEN_RGB[0]
+    out[o + 1] = HIDDEN_RGB[1]
+    out[o + 2] = HIDDEN_RGB[2]
+    out[o + 3] = 70 + 170 * share
   })
 }

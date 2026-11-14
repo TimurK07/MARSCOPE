@@ -1,22 +1,37 @@
 """Prepare terrain grids for the MARSCOPE study area (Mount Sharp, Gale crater).
 
-Source: MRO HiRISE "Gale Crater DEM" (1 m/px, layer Gale_DEM_SMG_1m), served by
-NASA JPL Mars Trek as an ArcGIS ImageServer. We export a patch of the DEM,
-compute slope, and write compact binary grids the web app loads directly.
+Source: MRO HiRISE "Gale Crater DEM" (1 m posts, layer Gale_DEM_SMG_1m), served
+by NASA JPL Mars Trek as an ArcGIS ImageServer.
+
+Two exports of the same DEM are used:
+
+  routing grid  1024 x 1024 cells of about 4 m. Elevation and slope on this grid
+                drive the route search and the hard 20 degree limit.
+  source grid   4096 x 4096 pixels of about 1 m, exactly 4 x 4 per routing cell.
+                Used only to measure how much steep ground hides inside a cell.
 
 Usage:
     python scripts/prepare_terrain.py
 
 Outputs (app/public/data/gale/):
-    elevation.bin  uint16 little-endian, value = (elevation_m - elev_min) / elev_scale
-    slope_cdeg.bin uint16 little-endian, value = ceil(slope_deg / slope_scale) (65535 = no data)
-    meta.json      grid geometry, scales and provenance
+    elevation_2cm.bin  uint16 little-endian, value = (elevation_m - elev_min) / elev_scale
+    slope_cdeg.bin     uint16 little-endian, value = ceil(slope_deg / slope_scale) (65535 = no data)
+    subcell.bin        uint8 pairs per cell: [steep source pixels, valid source pixels], each 0..16
+    meta.json          grid geometry, scales and provenance
+
+What the data can and cannot show
+    The DEM is a stereo product with 1 m posts; features smaller than a few metres
+    (rocks, ledges, loose ground) are not resolved, and the server resamples it to
+    our grids. The subcell metric counts 1 m pixels steeper than the limit. It is a
+    measure of how rough a cell is, not a probability of a fall, and it cannot find
+    hazards the DEM does not contain.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -34,49 +49,126 @@ SERVICE = "https://trek.nasa.gov/mars/trekarcgis/rest/services/Gale_DEM_SMG_1m/I
 # Study area (planetocentric degrees, east-positive longitude).
 # Covers Curiosity's recent traverse on Mount Sharp, including the boxwork region.
 WEST, SOUTH, EAST, NORTH = 137.355, -4.860, 137.425, -4.790
-SIZE = 1024  # pixels per side
+SIZE = 1024  # routing cells per side
+SUB = 4  # source pixels per routing cell, per side
+SRC = SIZE * SUB  # source pixels per side
 
 MARS_RADIUS_M = 3_396_190.0  # Mars 2000 sphere (IAU), same as the DEM's CRS 104905
-ELEV_SCALE = 0.1  # metres per uint16 step
+SLOPE_LIMIT_DEG = 20.0  # hard limit used by the planner (NASA EVA-EXP-0075)
+
+# 2 cm steps. With 10 cm steps the grade of a single 4 m step was off by up to
+# 1.4 degrees, which moved walking speed by 4% on a typical step and 23% on a bad
+# one. 2 cm keeps that under 0.3 degrees and still fits the area's 924 m of relief
+# in 16 bits.
+ELEV_SCALE = 0.02
 # Slope is stored rounded UP to the next step, so a stored value is never below the
-# true slope: a cell just over the 20 degree limit can never be read as walkable.
-SLOPE_SCALE = 0.01  # degrees per uint16 step
+# true slope: a cell just over the limit can never be read as walkable.
+SLOPE_SCALE = 0.01
 SLOPE_NODATA = 65535
 
 
-def download_dem(path: Path) -> str:
+def export_url(west: float, south: float, east: float, north: float, size: int) -> str:
     params = {
-        "bbox": f"{WEST},{SOUTH},{EAST},{NORTH}",
+        "bbox": f"{west},{south},{east},{north}",
         "bboxSR": "104905",
-        "size": f"{SIZE},{SIZE}",
+        "size": f"{size},{size}",
         "format": "tiff",
         "pixelType": "F32",
         "interpolation": "RSP_BilinearInterpolation",
         "f": "image",
     }
-    url = f"{SERVICE}/exportImage?{urllib.parse.urlencode(params)}"
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        print(f"Downloading DEM patch from Mars Trek -> {path.name}")
-        urllib.request.urlretrieve(url, path)
-    return url
+    return f"{SERVICE}/exportImage?{urllib.parse.urlencode(params)}"
+
+
+def fetch(url: str, path: Path, tries: int = 5) -> None:
+    """Downloads once and keeps the file. A short or failed download is retried, never kept."""
+    if path.exists():
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = path.with_suffix(path.suffix + ".part")
+    for attempt in range(1, tries + 1):
+        try:
+            print(f"Downloading {path.name}" + (f" (attempt {attempt})" if attempt > 1 else ""))
+            with urllib.request.urlopen(url, timeout=120) as r:
+                expected = int(r.headers.get("Content-Length") or 0)
+                data = r.read()
+            if expected and len(data) != expected:
+                raise IOError(f"got {len(data)} of {expected} bytes")
+            part.write_bytes(data)
+            part.replace(path)
+            return
+        except Exception as err:  # network errors and short reads alike
+            print(f"  failed: {err}")
+            time.sleep(2 * attempt)
+    raise SystemExit(f"Could not download {path.name}")
+
+
+def read_tiff(path: Path) -> np.ndarray:
+    a = tifffile.imread(path).astype(np.float64)
+    return a[..., 0] if a.ndim == 3 else a
+
+
+def valid_mask(dem: np.ndarray) -> np.ndarray:
+    """Anything outside a plausible Mars elevation range is treated as no data."""
+    return np.isfinite(dem) & (dem > -9000) & (dem < 22000)
+
+
+def slope_degrees(dem: np.ndarray, cell_y: float, cell_x: float) -> np.ndarray:
+    dz_dy, dz_dx = np.gradient(dem, cell_y, cell_x)
+    return np.degrees(np.arctan(np.hypot(dz_dx, dz_dy)))
+
+
+def load_source() -> np.ndarray:
+    """The DEM at about 1 m, fetched as a 4 x 4 mosaic of tiles so each request stays small."""
+    n = 4
+    tile = SRC // n
+    d_lon = (EAST - WEST) / n
+    d_lat = (NORTH - SOUTH) / n
+    out = np.empty((SRC, SRC), dtype=np.float64)
+    for row in range(n):  # north to south
+        for col in range(n):
+            box = (WEST + col * d_lon, NORTH - (row + 1) * d_lat, WEST + (col + 1) * d_lon, NORTH - row * d_lat)
+            path = RAW_DIR / f"gale_dem_1m_r{row}c{col}.tif"
+            fetch(export_url(*box, tile), path)
+            a = read_tiff(path)
+            assert a.shape == (tile, tile), a.shape
+            out[row * tile : (row + 1) * tile, col * tile : (col + 1) * tile] = a
+    return out
+
+
+def subcell_counts(src: np.ndarray, cell_y: float, cell_x: float, sub: int = SUB) -> tuple[np.ndarray, np.ndarray]:
+    """Per routing cell: how many of its source pixels are steeper than the limit, and how many are valid.
+
+    src holds sub x sub source pixels per routing cell. Slope at a source pixel is
+    a central difference, so it spans two pixels (about 2 m); on the outer edge of
+    the grid it is one-sided. A pixel next to missing data is itself counted as
+    missing, because its slope would be computed from an invalid neighbour.
+    """
+    rows, cols = src.shape[0] // sub, src.shape[1] // sub
+    valid = valid_mask(src)
+    filled = np.where(valid, src, np.nan)
+    slope = slope_degrees(filled, cell_y / sub, cell_x / sub)
+    # A central difference never reads the pixel itself, so the pixel's own validity is checked too.
+    ok = valid & np.isfinite(slope)
+    steep = ok & (slope > SLOPE_LIMIT_DEG)
+    blocks = lambda a: a.reshape(rows, sub, cols, sub).sum(axis=(1, 3)).astype(np.uint8)
+    return blocks(steep), blocks(ok)
 
 
 def main() -> None:
+    t0 = time.time()
     raw_path = RAW_DIR / "gale_dem_patch.tif"
-    url = download_dem(raw_path)
-
-    dem = tifffile.imread(raw_path).astype(np.float64)
-    if dem.ndim == 3:
-        dem = dem[..., 0]
+    url = export_url(WEST, SOUTH, EAST, NORTH, SIZE)
+    fetch(url, raw_path)
+    dem = read_tiff(raw_path)
     assert dem.shape == (SIZE, SIZE), dem.shape
 
-    # Anything outside a plausible Mars elevation range is treated as no data.
-    valid = np.isfinite(dem) & (dem > -9000) & (dem < 22000)
+    valid = valid_mask(dem)
     print(f"valid cells: {valid.mean() * 100:.2f}%")
     elev_min = float(dem[valid].min())
     elev_max = float(dem[valid].max())
     print(f"elevation range: {elev_min:.1f} .. {elev_max:.1f} m")
+    assert (elev_max - elev_min) / ELEV_SCALE < 65535, "relief does not fit the elevation encoding"
 
     # Cell size in metres. Rows run north -> south, columns west -> east.
     lat_mid = math.radians((SOUTH + NORTH) / 2)
@@ -86,26 +178,41 @@ def main() -> None:
     print(f"cell size: {cell_x:.3f} m (E-W) x {cell_y:.3f} m (N-S)")
 
     filled = np.where(valid, dem, elev_min)
-    dz_dy, dz_dx = np.gradient(filled, cell_y, cell_x)
-    slope_deg = np.degrees(np.arctan(np.hypot(dz_dx, dz_dy)))
+    slope_deg = slope_degrees(filled, cell_y, cell_x)
     print(
         "slope percentiles (50/90/99): "
         + ", ".join(f"{np.percentile(slope_deg[valid], p):.1f}" for p in (50, 90, 99))
     )
 
     elev_u16 = np.clip(np.round((filled - elev_min) / ELEV_SCALE), 0, 65535).astype("<u2")
+    assert np.abs(elev_u16[valid] * ELEV_SCALE + elev_min - dem[valid]).max() <= ELEV_SCALE / 2 + 1e-9
+
     slope_u16 = np.minimum(np.ceil(slope_deg / SLOPE_SCALE - 1e-9), SLOPE_NODATA - 1).astype("<u2")
     slope_u16[~valid] = SLOPE_NODATA
     # The encoding must be conservative everywhere there is data.
     assert np.all(slope_u16[valid] * SLOPE_SCALE >= slope_deg[valid] - 1e-6)
-    above = int(((slope_deg > 20.0) & valid).sum())
-    read_above = int(((slope_u16 * SLOPE_SCALE > 20.0) & valid).sum())
+    above = int(((slope_deg > SLOPE_LIMIT_DEG) & valid).sum())
+    read_above = int(((slope_u16 * SLOPE_SCALE > SLOPE_LIMIT_DEG) & valid).sum())
     assert read_above >= above
-    print(f"cells above 20 deg: {above} true, {read_above} as stored")
+    print(f"cells above {SLOPE_LIMIT_DEG:g} deg: {above} true, {read_above} as stored")
+
+    # Steep ground hidden inside cells, from the 1 m source grid.
+    src = load_source()
+    steep, ok = subcell_counts(src, cell_y, cell_x)
+    walkable = valid & (slope_deg <= SLOPE_LIMIT_DEG)
+    some = walkable & (steep > 0)
+    half = walkable & (steep * 2 >= np.maximum(ok, 1)) & (ok > 0)
+    print(f"source pixels: {(SRC * SRC):,}, valid for slope {ok.sum() / (SRC * SRC) * 100:.2f}%")
+    print(
+        f"walkable cells: {int(walkable.sum()):,}; with any 1 m pixel over the limit: "
+        f"{some.sum() / walkable.sum() * 100:.1f}%; with half or more: {half.sum() / walkable.sum() * 100:.1f}%"
+    )
+    subcell = np.stack([steep, ok], axis=-1)  # interleaved pairs
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    elev_u16.tofile(OUT_DIR / "elevation.bin")
+    elev_u16.tofile(OUT_DIR / "elevation_2cm.bin")
     slope_u16.tofile(OUT_DIR / "slope_cdeg.bin")
+    subcell.tofile(OUT_DIR / "subcell.bin")
 
     meta = {
         "name": "Mount Sharp study area, Gale crater",
@@ -115,7 +222,7 @@ def main() -> None:
         "cellSizeX_m": cell_x,
         "cellSizeY_m": cell_y,
         "elevation": {
-            "file": "elevation.bin",
+            "file": "elevation_2cm.bin",
             "dtype": "uint16-le",
             "min_m": elev_min,
             "max_m": elev_max,
@@ -127,6 +234,14 @@ def main() -> None:
             "scale_deg": SLOPE_SCALE,
             "nodata": SLOPE_NODATA,
         },
+        "subcell": {
+            "file": "subcell.bin",
+            "dtype": "uint8 pairs: steep, valid",
+            "pixelsPerCell": SUB * SUB,
+            "limit_deg": SLOPE_LIMIT_DEG,
+            "pixel_m": cell_x / SUB,
+            "note": "Derived metric: count of ~1 m source pixels in each cell whose slope exceeds the limit. Not a hazard probability.",
+        },
         "crs": "Mars 2000 sphere (ESRI:104905), planetocentric lat, east-positive lon",
         "source": {
             "dataset": "MRO HiRISE, Gale Crater DEM (Gale_DEM_SMG_1m), 1 m/px",
@@ -136,7 +251,7 @@ def main() -> None:
         },
     }
     (OUT_DIR / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
-    print(f"wrote {OUT_DIR}")
+    print(f"wrote {OUT_DIR} in {time.time() - t0:.1f} s")
 
 
 if __name__ == "__main__":

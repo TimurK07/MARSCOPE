@@ -31,7 +31,9 @@ it('captures the example mission', () => {
     fixed += r.leg.energyFixed
     cells += r.leg.samples.length
     samples.push(...r.leg.samples)
-    legs.push(`${r.leg.distance.toFixed(0)} m / ${(r.leg.duration / 60).toFixed(1)} min / max slope ${r.leg.maxSlope.toFixed(2)}`)
+    legs.push(
+      `${r.leg.distance.toFixed(0)} m / ${(r.leg.duration / 60).toFixed(2)} min / max slope ${r.leg.maxSlope.toFixed(2)} | grid path ${r.leg.grid.distance.toFixed(0)} m / ${(r.leg.grid.duration / 60).toFixed(2)} min, ${r.leg.grid.cells} cells -> ${r.leg.vertices.length} vertices | hidden steep: ${r.leg.hiddenCells == null ? 'n/a' : (r.leg.hiddenCells * 100).toFixed(1) + '% of cells, worst ' + ((r.leg.hiddenMax ?? 0) * 100).toFixed(0) + '%, load ' + (r.leg.hiddenLoad ?? 0).toFixed(2)}`,
+    )
   }
   const ms = performance.now() - t0
   const tb = performance.now()

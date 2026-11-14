@@ -126,9 +126,14 @@ We could not open the USGS copyright policy page from our environment, so the us
 
 ### How the planner uses these
 
+- **Two grids from one DEM.** The route search runs on a 1024 × 1024 grid of about 4 m cells. A second export of the same HiRISE DEM at about 1 m (4096 × 4096, exactly 4 × 4 pixels per cell) is used only to measure what the coarse grid hides.
+- **Elevation precision.** Stored in 2 cm steps. With the earlier 10 cm steps the grade of one 4 m step could be off by 1.4°, which moved walking speed by 4% on a typical step and 23% on a bad one.
 - **Hard limit.** A cell is walkable only if its slope is 20° or less. Slope is stored in steps of 0.01°, rounded up, so a stored value is never below the true slope. Cells without terrain data are not walkable.
 - **No corner cutting.** A diagonal step is refused when either of the two cells it passes between is not walkable.
 - **Walk back.** For every point of a route we compute the fastest safe way to the habitat over the terrain, with the same walking model. Climbing is slower than descending, so this is computed towards the habitat and is not the outbound time reversed. The mission checks use the longest and the slowest of these.
+- **Hidden steep ground (derived metric).** For every cell we count how many of its 16 source pixels are steeper than 20°, with slope taken over about 2 m. It is shown as a layer, in the point inspector and in the route telemetry. It is an indicator of roughness, not a probability of anything, and it does not change the hard limit: a cell is never blocked or unblocked by it.
+- **Straightened routes.** The grid search gives a staircase. A straight shortcut replaces part of it only if every cell the line crosses is walkable (including both cells beside any corner it touches), walking it is no slower with the same direction-dependent model, and it crosses no more hidden steep ground. Distance, time, climb and energy are then measured along the straightened path. The walk back to the habitat is still computed on the grid, so it is never underestimated by straightening.
+- **What the terrain data cannot show.** The DEM has 1 m posts and comes from stereo imagery. Rocks, ledges and loose ground smaller than a few metres are not in it, and we resample it on the server. Compared with the tilt Curiosity measured at 157 of its stops in the study area, our 4 m slope is 0.7° lower on average with a spread of 2.5°. No route here should be read as cleared of hazards.
 - **Feasibility comes first.** GO / NO-GO is assessed only for a route that exists. A plan with an unreachable checkpoint is NO ROUTE.
 - **Energy is walking energy.** Work at the targets is not modelled.
 

@@ -85,6 +85,7 @@ export default function App() {
   const [hazard, setHazard] = useState<LayerState & { mode: HazardMode }>({ on: true, opacity: 0.65, mode: 'hazards' })
   const [elevation, setElevation] = useState<LayerState>({ on: false, opacity: 0.55 })
   const [contours, setContours] = useState<LayerState>({ on: false, opacity: 0.8 })
+  const [hiddenSteep, setHiddenSteep] = useState<LayerState>({ on: false, opacity: 0.85 })
   const [showTrack, setShowTrack] = useState(true)
 
   // Map interaction
@@ -380,7 +381,7 @@ export default function App() {
   const rover = track?.stops[track.stops.length - 1] ?? null
   const extent = view === 'global' ? 'mars' : zoom <= REGIONAL_ZOOM ? 'crater' : 'site'
   const layerCount =
-    TILE_LAYERS.filter((d) => tiles[d.id].on).length + [hazard, elevation, contours].filter((l) => l.on).length
+    TILE_LAYERS.filter((d) => tiles[d.id].on).length + [hazard, elevation, contours, hiddenSteep].filter((l) => l.on).length
   const route = plan.plan && !plan.plan.error ? plan.plan : null
   const failed = plan.checks?.filter((c) => !c.ok) ?? []
   const mission = missionSummary(plan)
@@ -396,6 +397,8 @@ export default function App() {
     setElevation,
     contours,
     setContours,
+    hiddenSteep,
+    setHiddenSteep,
     showTrack,
     setShowTrack,
     weather,
@@ -522,6 +525,7 @@ export default function App() {
             hazard={hazard}
             elevation={elevation}
             contours={contours}
+            hidden={hiddenSteep}
             showTrack={showTrack}
             track={track}
             points={plan.points}

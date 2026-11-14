@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { GEOLOGY, HIRISE, THEMIS_DAY, THEMIS_NIGHT, type TileLayerDef } from '../lib/layers'
 import { RADIATION, SLOPE_CLASSES, SOURCES } from '../lib/model'
-import { CONTOUR_INDEX_M, CONTOUR_INTERVAL_M, ELEVATION_RAMP, type HazardMode } from '../lib/overlays'
+import { CONTOUR_INDEX_M, CONTOUR_INTERVAL_M, ELEVATION_RAMP, HIDDEN_RGB, type HazardMode } from '../lib/overlays'
 import type { RoverStop, WeatherSol } from '../lib/nasa'
 import type { Terrain } from '../lib/terrain'
 import { fmtCoord } from '../hooks/usePlan'
@@ -21,6 +21,8 @@ interface Props {
   setElevation: (s: LayerState) => void
   contours: LayerState
   setContours: (s: LayerState) => void
+  hiddenSteep: LayerState
+  setHiddenSteep: (s: LayerState) => void
   showTrack: boolean
   setShowTrack: (v: boolean) => void
   weather: WeatherSol | null | 'loading'
@@ -189,6 +191,23 @@ export default function DataPane(p: Props) {
           state={p.contours}
           onChange={p.setContours}
         />
+        {p.terrain.subSteep && (
+          <Layer
+            title="Hidden steep ground"
+            source={`Derived from MRO HiRISE DEM · ${p.terrain.meta.subcell?.pixel_m.toFixed(1)} m pixels`}
+            description="Walkable cells that hide ground steeper than 20° at the 1 m scale. A roughness indicator, not a hazard probability; it does not change the hard slope limit."
+            state={p.hiddenSteep}
+            onChange={p.setHiddenSteep}
+          >
+            <div className="ramp">
+              <i style={{ background: `linear-gradient(90deg, rgb(${HIDDEN_RGB.join(',')} / 0.25), rgb(${HIDDEN_RGB.join(',')}))` }} />
+              <div>
+                <code>few 1 m pixels</code>
+                <code>all over 20°</code>
+              </div>
+            </div>
+          </Layer>
+        )}
       </Group>
       </>
     )

@@ -16,6 +16,9 @@ interface Props {
   compact?: boolean
 }
 
+/** Signed saving: positive means the straightened path is shorter or quicker. */
+const fmtSaved = (v: number) => `${v >= 0 ? '−' : '+'}${Math.abs(v).toFixed(v >= 100 ? 0 : 1)}`
+
 export type Verdict = 'standby' | 'go' | 'nogo' | 'noroute'
 
 export function verdictOf(s: PlanState): Verdict {
@@ -101,6 +104,15 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
   // With no route yet, show the limits the plan will be held to.
   const idleChecks = buildChecks({ evaSeconds: 0, walkBack: null }).map((c) => ({ ...c, value: '—', ok: true, ratio: 0, margin: '' }))
   const targets = Math.max(points.length - 1, 0)
+  // Hidden steep ground along the route, where the terrain data has it.
+  const withHidden = ready ? plan.legs.filter((l) => l.hiddenCells != null) : []
+  const hidden =
+    withHidden.length > 0
+      ? {
+          cells: withHidden.reduce((a, l) => a + (l.hiddenCells ?? 0), 0) / withHidden.length,
+          worst: Math.max(...withHidden.map((l) => l.hiddenMax ?? 0)),
+        }
+      : null
 
   return (
     <>
@@ -270,7 +282,8 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           Duration and the 2 km walking range are from NASA EVA-EXP-0075. We apply the range to the actual walk-back
           path. The {EVA.walkBackTime_min} min walk-back time is our reading of the same document (2 km at about 2 km/h,
           one hour of secondary oxygen), not a NASA requirement. Walking back is computed over the terrain towards the
-          habitat, so a climb home counts as slower than the walk out.
+          habitat, so a climb home counts as slower than the walk out. It uses the grid path before straightening, so
+          it can read slightly longer than the straightened route on the map; the difference is on the safe side.
         </p>
       </Section>
 
@@ -286,10 +299,25 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
             <Datum label="Farthest point, straight line">{fmtKm(plan.farthest)}</Datum>
             <Datum label="Walking energy">{Math.round(s.energyKcal)} kcal</Datum>
             <Datum label="Route legs">{plan.legs.length}</Datum>
+            <Datum label="Straightening vs grid path">
+              {fmtSaved(plan.legs.reduce((a, l) => a + l.grid.distance - l.distance, 0))} m,{' '}
+              {fmtSaved(plan.legs.reduce((a, l) => a + l.grid.duration - l.duration, 0))} s
+            </Datum>
+            {hidden && (
+              <Datum label="Cells with hidden steep ground">
+                {Math.round(hidden.cells * 100)}%, worst {Math.round(hidden.worst * 100)}%
+              </Datum>
+            )}
           </dl>
         ) : (
           <p className="muted">Available once a route is planned.</p>
         )}
+        <p className="footnote">
+          The route is straightened only where the straight line stays on walkable ground, is no slower, and crosses no
+          more hidden steep ground. Hidden steep ground counts 1 m DEM pixels over {MAX_SLOPE_DEG}° inside a 4 m cell; it
+          is an indicator of roughness, not a probability, and rocks or ledges smaller than the DEM resolves are not
+          detected.
+        </p>
         <p className="footnote">
           Energy covers walking only (Santee et al. 2001). Work at the targets is not modelled, so this is not the
           energy of the whole EVA.

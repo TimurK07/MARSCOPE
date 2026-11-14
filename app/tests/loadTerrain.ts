@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Terrain, TerrainMeta } from '../src/lib/terrain'
+import { splitSubcell, type Terrain, type TerrainMeta } from '../src/lib/terrain'
 
 const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data', 'gale')
 
@@ -18,6 +18,7 @@ export function loadTerrainFromDisk(): Terrain {
     height: meta.height,
     elevRaw: new Uint16Array(bytes(meta.elevation.file)),
     slopeRaw: new Uint16Array(bytes(meta.slope.file)),
+    ...(meta.subcell ? splitSubcell(bytes(meta.subcell.file)) : {}),
   }
 }
 
