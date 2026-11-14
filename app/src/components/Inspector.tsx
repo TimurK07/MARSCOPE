@@ -3,6 +3,7 @@ import { fetchGeologicUnit, type GeologicUnit } from '../lib/geology'
 import { MAX_SLOPE_DEG, slopeClass, surfaceDistanceM } from '../lib/model'
 import { cellAt, elevationAt, hiddenSteepShare, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
 import { fmtKm, fmtLat, fmtLon } from '../hooks/usePlan'
+import { fmtSlope } from '../lib/format'
 
 interface Props {
   terrain: Terrain
@@ -58,7 +59,7 @@ export default function Inspector({ terrain, point, habitat, targetCount, onSetH
             {cls ? (
               <>
                 <i className="dot" style={{ background: `rgb(${cls.rgb.join(',')})` }} />
-                {slope.toFixed(1)}° <span>{cls.label.toLowerCase()}</span>
+                {fmtSlope(slope, MAX_SLOPE_DEG)} <span>{cls.label.toLowerCase()}</span>
               </>
             ) : (
               '—'

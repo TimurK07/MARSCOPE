@@ -1,5 +1,7 @@
-// Physical model behind the planner. Every constant here comes from a cited
-// source; see SOURCES at the bottom and docs/DATA_SOURCES.md.
+// Physical model behind the planner. Every constant here is given with where it
+// comes from. Some are measurements or published models; several are MARSCOPE
+// planning assumptions informed by lunar EVA documents, and say so. None is a
+// validated value for EVAs on Mars. See SOURCES at the bottom and docs/DATA_SOURCES.md.
 
 import type { LatLon } from './terrain'
 
@@ -136,12 +138,18 @@ export const RADIATION = {
    * measured by Curiosity's RAD, Aug 2012 – Jun 2013 (Hassler et al., 2014).
    */
   doseEquivalent_mSv_per_day: 0.67,
-  /** NASA-STD-3001 Vol 1 Rev B [V1 4030]: career effective dose limit. */
+  /**
+   * NASA-STD-3001 Vol 1 Rev B [V1 4030]: career limit, stated as NASA effective dose.
+   * Kept for reference only. It is a different quantity from the dose equivalent RAD
+   * measures, so the app does not express its estimates as a share of it.
+   */
   careerLimit_mSv: 600,
   note:
-    'Background galactic cosmic rays only, at the average rate Curiosity RAD measured in Gale crater. ' +
-    'Solar particle events add to this: on 20 May 2024 RAD recorded 8,100 µGy from a single storm. ' +
-    'Do not start an EVA during a solar storm warning.',
+    'One historical average: the galactic cosmic ray dose equivalent Curiosity RAD measured on the surface in Gale crater ' +
+    'from August 2012 to June 2013, a period of solar maximum, when this background is lower than at solar minimum. ' +
+    'Solar particle events are not included (on 20 May 2024 RAD recorded 8,100 µGy from a single storm), and neither is ' +
+    'any shielding by a suit or a habitat. The same background applies inside an unshielded habitat, so this is ' +
+    'exposure during the hours of the EVA, not exposure caused by going outside.',
 }
 
 /**
@@ -169,7 +177,7 @@ export interface SlopeClass {
 }
 
 // Class breaks follow the breakpoints of the walking-speed model (6°, 15°)
-// and the NASA traversable-slope limit (20°).
+// and the 20° planning limit.
 export const SLOPE_CLASSES: SlopeClass[] = [
   { id: 'easy', label: 'Easy walking', range: '0–6°', maxDeg: 6, rgb: [108, 188, 166], alpha: 70 },
   { id: 'slow', label: 'Slow going', range: '6–15°', maxDeg: 15, rgb: [224, 178, 70], alpha: 150 },

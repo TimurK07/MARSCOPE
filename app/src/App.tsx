@@ -14,7 +14,7 @@ import { fmtDur, fmtKm, fmtLat, fmtLon, usePlan } from './hooks/usePlan'
 import type { BBox } from './lib/globe'
 import type { GlobeData, GlobeViewState } from './lib/globeEngine'
 import { TILE_LAYERS, THEMIS_DAY } from './lib/layers'
-import { surfaceDistanceM } from './lib/model'
+import { PLANNING_PACE, surfaceDistanceM } from './lib/model'
 import { fetchLatestWeather, fetchRoverTrack, type RoverStop, type RoverTrack, type WeatherSol } from './lib/nasa'
 import type { HazardMode } from './lib/overlays'
 import type { RouteSample } from './lib/router'
@@ -61,7 +61,7 @@ function missionSummary(plan: ReturnType<typeof usePlan>) {
     tone: verdict === 'go' ? ('go' as const) : verdict === 'nogo' || verdict === 'noroute' ? ('nogo' as const) : ('idle' as const),
     title: plan.points.length > 0 ? `EVA plan · ${VERDICT_TITLE[verdict]}` : 'Gale crater study area',
     detail: route
-      ? `${fmtKm(route.distance)} · ${fmtDur(plan.evaSeconds)} · ${targets} target${targets === 1 ? '' : 's'}`
+      ? `${fmtKm(route.distance)} · EVA ${fmtDur(plan.planEvaSeconds)} at ≤ ${PLANNING_PACE.max_kmh} km/h · ${targets} target${targets === 1 ? '' : 's'}`
       : plan.points.length > 0
         ? 'Habitat set. Add a science target in the workspace.'
         : 'Terrain data and EVA routing are available here.',

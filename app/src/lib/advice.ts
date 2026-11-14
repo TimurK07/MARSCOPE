@@ -44,7 +44,7 @@ export function durationAdvice(a: AdviceInput): string {
 export function walkBackAdvice(a: AdviceInput, kind: 'distance' | 'time'): string {
   const back = a.walkBack
   if (!back || !back.reachable) {
-    return 'Part of this route has no safe way back to the habitat within the slope limit. Move the checkpoint or the habitat.'
+    return 'Part of this route has no way back to the habitat within the slope limit. Move the checkpoint or the habitat.'
   }
   const where = nearestCheckpoint(a.points, kind === 'distance' ? back.maxDistanceAt : back.maxTimeAt)
   if (!back.verified) {

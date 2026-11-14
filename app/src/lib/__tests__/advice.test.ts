@@ -52,9 +52,10 @@ describe('walk-back advice', () => {
     expect(text).toContain('target 1')
   })
 
-  it('says when there is no safe way back', () => {
+  it('says when there is no way back within the slope limit', () => {
     const text = walkBackAdvice({ points, walkTime: 0, stopMinutes: 20, walkBack: back({ reachable: false }) }, 'time')
-    expect(text).toContain('no safe way back')
+    expect(text).toContain('no way back to the habitat within the slope limit')
+    expect(text).not.toMatch(/\bsafe\b/)
   })
 
   it('gives distance and time of the same return path', () => {

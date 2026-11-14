@@ -144,7 +144,7 @@ export default function DataPane(p: Props) {
         <Layer
           title="Slope hazard"
           source="Derived from MRO HiRISE DEM"
-          description="Ground a suited crew member should avoid, from the walking model's slope limits."
+          description="Ground by slope class. Over 20° is not routed (a MARSCOPE planning limit); the lower classes follow the breakpoints of the walking-speed model."
           state={p.hazard}
           onChange={(s) => p.setHazard({ ...p.hazard, ...s })}
         >
@@ -251,7 +251,7 @@ export default function DataPane(p: Props) {
           <dl className="data">
             <Datum label="GCR dose equivalent">{RADIATION.doseEquivalent_mSv_per_day} mSv/day</Datum>
           </dl>
-          <p className="footnote">Average measured on the surface in Gale crater, Aug 2012 – Jun 2013.</p>
+          <p className="footnote">Average measured on the surface in Gale crater, Aug 2012 – Jun 2013, during solar maximum. Not a constant.</p>
         </div>
 
         {[THEMIS_DAY, THEMIS_NIGHT].map((def) => (
@@ -303,8 +303,10 @@ export default function DataPane(p: Props) {
   return (
     <Group title="Model and data sources">
       <p className="layer-desc">
-        Every constant in the planner comes from a NASA document or a peer-reviewed paper. Map imagery and terrain come
-        from NASA JPL Mars Trek; rover data comes from mars.nasa.gov.
+        Each constant in the planner is listed with its source. Some are measurements or published models; the slope,
+        duration, return and pace limits are MARSCOPE planning assumptions informed by NASA lunar EVA documents. None
+        is a validated value for EVAs on Mars. Map imagery and terrain come from NASA JPL Mars Trek; rover data comes
+        from mars.nasa.gov.
       </p>
       <ul className="sources">
         {SOURCES.map((src) => (

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
+import { PLANNING_PACE } from '../lib/model'
 import { VERDICT_TITLE, verdictOf } from './MissionPanel'
 
 export type SheetSnap = 'peek' | 'half' | 'full'
@@ -108,8 +109,8 @@ export default function MobileSheet({ plan, snap, onSnap, tab, onTab, marked, ch
                 {fmtKm(plan.plan!.distance)}
               </span>
               <span>
-                <b>EVA</b>
-                {fmtDur(plan.evaSeconds)}
+                <b>EVA ≤ {PLANNING_PACE.max_kmh} km/h</b>
+                {fmtDur(plan.planEvaSeconds)}
               </span>
             </>
           ) : (

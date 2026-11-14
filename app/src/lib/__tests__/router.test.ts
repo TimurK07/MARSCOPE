@@ -216,7 +216,7 @@ describe('walk back to the habitat', () => {
     expect(back.reachable).toBe(true)
   })
 
-  it('flags a point with no safe way back', () => {
+  it('flags a point with no way back', () => {
     const t = makeTerrain(N, N, wall(30))
     const back = walkBack(t, at(t, 5, 32), [at(t, 55, 32)])!
     expect(back.reachable).toBe(false)

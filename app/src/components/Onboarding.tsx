@@ -8,7 +8,7 @@ interface Props {
 
 const DATA = [
   { mission: 'Mars Reconnaissance Orbiter', use: 'HiRISE and CTX imagery, 1 m terrain model' },
-  { mission: 'Curiosity rover (MSL)', use: 'Traverse, Navcam frames, weather, radiation' },
+  { mission: 'Curiosity rover (MSL)', use: 'Traverse, Navcam frames, weather, published surface radiation rate' },
   { mission: 'Mars Odyssey', use: 'THEMIS thermal infrared' },
   { mission: 'USGS · Viking', use: 'Geologic map, global color context' },
 ]
@@ -24,7 +24,8 @@ export default function Onboarding({ onStart, onExample, canExample, hasPlan }: 
           <p className="brief-lede">
             MARSCOPE is a mission-planning workspace for a surface EVA. It layers data from NASA missions over the
             ground Curiosity is exploring and plans walking routes between a habitat and your science targets that stay
-            within NASA's 20° slope limit. It is a planning aid, not a safety certification.
+            within a 20° slope limit: a MARSCOPE planning assumption informed by NASA lunar EVA documents. It is a
+            planning aid, not a safety certification.
           </p>
           <ol className="brief-steps">
             <li>
@@ -37,7 +38,7 @@ export default function Onboarding({ onStart, onExample, canExample, hasPlan }: 
             </li>
             <li>
               <b>Read the mission status</b>
-              <span>GO or NO-GO against NASA EVA limits.</span>
+              <span>GO or NO-GO against MARSCOPE planning limits.</span>
             </li>
           </ol>
           <div className="brief-actions">
@@ -59,7 +60,7 @@ export default function Onboarding({ onStart, onExample, canExample, hasPlan }: 
               </li>
             ))}
           </ul>
-          <p className="brief-note">Every model constant links to its NASA or peer-reviewed source.</p>
+          <p className="brief-note">Each model constant is listed with its source. The planning limits are MARSCOPE assumptions.</p>
         </div>
       </div>
     </div>

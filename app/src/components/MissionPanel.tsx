@@ -6,6 +6,7 @@ import type { ModeSummary } from '../lib/planner'
 import { EVA, MAX_SLOPE_DEG, PLANNING_PACE, RADIATION, RETURN_LIMITS } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
 import { Datum, Icon, Section, Segmented } from './ui'
+import { fmtDose, fmtSlope } from '../lib/format'
 
 interface Props {
   plan: PlanState
@@ -43,7 +44,12 @@ function ModeComparison(props: {
       value: (d) => fmtDur(d.planWalkTime),
       num: (d) => d.planWalkTime,
     },
-    { label: 'Walking energy', value: (d) => `${Math.round(d.energyKcal)} kcal`, num: (d) => d.energyKcal },
+    {
+      label: 'Walking energy, model',
+      hint: 'Metabolic energy of walking by the adopted model (Santee et al. 2001), at the model speed. Mars gravity enters only its climb and descent terms.',
+      value: (d) => `${Math.round(d.energyKcal)} kcal`,
+      num: (d) => d.energyKcal,
+    },
     { label: 'Climb', value: (d) => `+${Math.round(d.ascent)} m`, num: (d) => d.ascent },
     {
       label: 'Hidden steep ground',
@@ -117,7 +123,8 @@ function ModeComparison(props: {
       <p className="footnote">
         All three routes obey the same hard limits: {MAX_SLOPE_DEG}° maximum slope for every cell and every step walked, no
         clipping of no-go cells, and the same EVA and return checks. They are measured the same way; the lowest value in each row is underlined. Walking
-        energy is an approximation adapted from research on Earth (Santee et al. 2001) and scaled to Mars gravity.
+        energy is an approximation adapted from treadmill research on Earth (Santee et al. 2001), at the model's walking
+        speed; Mars gravity enters only its climb and descent terms, not the level-walking term that makes up most of it.
         Cautious weights time on hidden steep ground by 1 + {CAUTION_WEIGHT} × the cell's steep share: a heuristic
         coefficient of ours, not a NASA-certified safety model and not a measured risk. Each route is the least-cost
         path on the 4 m grid for its own objective; it is then straightened, and the straightened route is not proven
@@ -168,7 +175,7 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
                 : 'Habitat set. Add a science target.'}
           </p>
         )}
-        {verdict === 'go' && <p>Route is within all mission constraints.</p>}
+        {verdict === 'go' && <p>Route is within all MARSCOPE planning limits. Not a safety clearance.</p>}
         {verdict === 'noroute' && <p>{plan?.error}</p>}
         {verdict === 'unverified' && (
           <p>
@@ -196,15 +203,17 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
           <dd>{ready ? fmtKm(plan.distance) : '—'}</dd>
         </div>
         <div>
-          <dt title="Walking time by the speed model plus time at the targets. The time at the planning pace is under Route telemetry.">EVA duration · model</dt>
-          <dd>{ready ? fmtDur(s.evaSeconds) : '—'}</dd>
+          <dt title={`EVA duration with walking no faster than ${PLANNING_PACE.max_kmh} km/h, plus time at the targets. The 8-hour limit is judged on this figure. The duration by the speed model alone is under Route telemetry.`}>
+            EVA duration · ≤ {PLANNING_PACE.max_kmh} km/h
+          </dt>
+          <dd>{ready ? fmtDur(s.planEvaSeconds) : '—'}</dd>
         </div>
         <div>
           <dt>Climb / descent</dt>
           <dd>{ready ? `+${Math.round(plan.ascent)} / −${Math.round(plan.descent)} m` : '—'}</dd>
         </div>
         <div>
-          <dt>Walking energy</dt>
+          <dt title="Metabolic energy of walking by the adopted model (Santee et al. 2001), at the model's walking speed. An approximation.">Walking energy · model</dt>
           <dd>{ready ? `${Math.round(s.energyKcal)} kcal` : '—'}</dd>
         </div>
       </dl>
@@ -397,7 +406,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           <b>Route feasibility</b>
           <span>
             {verdict === 'noroute'
-              ? 'No safe route. Mission constraints are not assessed.'
+              ? 'No route within the slope limit. Mission constraints are not assessed.'
               : ready
                 ? `Every leg stays on ground of ${MAX_SLOPE_DEG}° or less.`
                 : `Legs must stay on ground of ${MAX_SLOPE_DEG}° or less.`}
@@ -446,12 +455,12 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
             <Datum label="Time at targets">{fmtDur(targets * s.stopMinutes * 60)}</Datum>
             <Datum label="EVA duration, model">{fmtDur(s.evaSeconds)}</Datum>
             <Datum label={`EVA duration at ≤ ${PLANNING_PACE.max_kmh} km/h`}>{fmtDur(plan.planWalkTime + targets * s.stopMinutes * 60)}</Datum>
-            <Datum label="Mean walking speed">{(plan.distance / plan.walkTime).toFixed(2)} m/s</Datum>
+            <Datum label="Mean walking speed, model">{(plan.distance / plan.walkTime).toFixed(2)} m/s</Datum>
             <Datum label="Steepest terrain on route">
-              {plan.maxSlope.toFixed(1)}° of {MAX_SLOPE_DEG}°
+              {fmtSlope(plan.maxSlope, MAX_SLOPE_DEG)} of {MAX_SLOPE_DEG}°
             </Datum>
             <Datum label="Farthest point, straight line">{fmtKm(plan.farthest)}</Datum>
-            <Datum label="Walking energy">{Math.round(s.energyKcal)} kcal</Datum>
+            <Datum label="Walking energy, model">{Math.round(s.energyKcal)} kcal</Datum>
             <Datum label="Route legs">{plan.legs.length}</Datum>
             <Datum label="Straightening vs grid path">
               {fmtSaved(plan.legs.reduce((a, l) => a + l.grid.distance - l.distance, 0))} m,{' '}
@@ -481,34 +490,29 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           detected.
         </p>
         <p className="footnote">
-          Energy covers walking only (Santee et al. 2001). Work at the targets is not modelled, so this is not the
-          energy of the whole EVA.
+          Energy is metabolic energy of walking only, by the adopted model (Santee et al. 2001) at the model's walking
+          speed. That model comes from treadmill walking on Earth at one speed with loads up to 18 kg; only its climb and
+          descent terms use Mars gravity. Work at the targets is not modelled, so this is not the energy of the whole EVA.
         </p>
       </Section>
 
       <Section
-        title="Radiation exposure"
+        title="Background radiation"
         defaultOpen={false}
-        aside={ready ? `${s.doseMsv.toFixed(3)} / ${s.planDoseMsv.toFixed(3)} mSv` : undefined}
+        aside={ready ? `${fmtDose(s.doseMsv)} · ${fmtDose(s.planDoseMsv)}` : undefined}
       >
         <dl className="data">
           <Datum label="EVA duration, model">{ready ? fmtDur(s.evaSeconds) : '—'}</Datum>
-          <Datum label="Background dose, model">{ready ? `${s.doseMsv.toFixed(3)} mSv` : '—'}</Datum>
+          <Datum label="Background over that time">{ready ? fmtDose(s.doseMsv) : '—'}</Datum>
           <Datum label={`EVA duration at ≤ ${PLANNING_PACE.max_kmh} km/h`}>{ready ? fmtDur(s.planEvaSeconds) : '—'}</Datum>
-          <Datum label={`Background dose at ≤ ${PLANNING_PACE.max_kmh} km/h`}>{ready ? `${s.planDoseMsv.toFixed(3)} mSv` : '—'}</Datum>
-          <Datum label="Surface rate (RAD)">{RADIATION.doseEquivalent_mSv_per_day} mSv/day</Datum>
-          <Datum label="Career limit, for scale">{RADIATION.careerLimit_mSv} mSv</Datum>
-          <Datum label="Share of career limit, model">
-            {ready ? `${((s.doseMsv / RADIATION.careerLimit_mSv) * 100).toFixed(3)} %` : '—'}
-          </Datum>
-          <Datum label={`Share at ≤ ${PLANNING_PACE.max_kmh} km/h`}>
-            {ready ? `${((s.planDoseMsv / RADIATION.careerLimit_mSv) * 100).toFixed(3)} %` : '—'}
-          </Datum>
+          <Datum label="Background over that time">{ready ? fmtDose(s.planDoseMsv) : '—'}</Datum>
+          <Datum label="Surface rate used">{RADIATION.doseEquivalent_mSv_per_day} mSv/day</Datum>
         </dl>
         <p className="footnote">
-          Two figures, one for each EVA duration: the same surface rate multiplied by the time outside. They are
-          simplified estimates of background exposure, not validated astronaut doses, and the planning figure is a second
-          scenario, not an upper bound: a longer EVA or a solar event gives more. Radiation does not enter GO / NO-GO.
+          Each figure is the surface rate multiplied by one of the two EVA durations. They are simplified estimates of
+          background exposure during those hours, not validated astronaut doses and not exposure caused by the EVA
+          itself. The second is another scenario, not an upper bound. Radiation has no limit in MARSCOPE and does not
+          enter GO / NO-GO.
         </p>
         <p className="footnote">{RADIATION.note}</p>
       </Section>

@@ -3,6 +3,8 @@ import type { RoverStop } from '../lib/nasa'
 import type { RouteSample } from '../lib/router'
 import type { LatLon, Terrain } from '../lib/terrain'
 import { fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
+import { fmtSlope } from '../lib/format'
+import { MAX_SLOPE_DEG } from '../lib/model'
 import Inspector from './Inspector'
 import Profile from './Profile'
 import SurfaceView from './SurfaceDrawer'
@@ -155,7 +157,7 @@ export default function BottomDock(p: Props) {
                 </span>
                 <span>
                   <b>SLOPE</b>
-                  {p.cursor.slope.toFixed(1)}°
+                  {fmtSlope(p.cursor.slope, MAX_SLOPE_DEG)}
                 </span>
               </>
             ) : (

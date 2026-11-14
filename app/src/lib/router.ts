@@ -36,8 +36,8 @@ export function findLeg(t: Terrain, from: LatLon, to: LatLon, opts: LegOptions =
   const start = cellAt(t, from)
   const goal = cellAt(t, to)
   if (start < 0 || goal < 0) return { ok: false, reason: 'Point is outside the mapped study area.' }
-  if (!isWalkable(t, start)) return { ok: false, reason: 'Start point is on terrain steeper than the safe limit.' }
-  if (!isWalkable(t, goal)) return { ok: false, reason: 'Target is on terrain steeper than the safe limit.' }
+  if (!isWalkable(t, start)) return { ok: false, reason: 'Start point is on terrain steeper than the slope limit.' }
+  if (!isWalkable(t, goal)) return { ok: false, reason: 'Target is on terrain steeper than the slope limit.' }
 
   const w = t.width
   const h = t.height
@@ -93,7 +93,7 @@ export function findLeg(t: Terrain, from: LatLon, to: LatLon, opts: LegOptions =
   }
 
   if (!Number.isFinite(g[goal])) {
-    return { ok: false, reason: 'No safe route: the target is cut off by slopes steeper than the limit.' }
+    return { ok: false, reason: 'No route within the slope limit: the target is cut off by steeper ground.' }
   }
 
   const cells: number[] = []
@@ -101,7 +101,7 @@ export function findLeg(t: Terrain, from: LatLon, to: LatLon, opts: LegOptions =
   cells.reverse()
 
   const grid = measurePath(t, cells, obj)
-  if (!grid) return { ok: false, reason: 'No safe route: the path found does not stay on walkable ground.' }
+  if (!grid) return { ok: false, reason: 'No route within the slope limit: the path found does not stay on walkable ground.' }
   let chosen = grid
   let vertices = cells
   if (opts.smooth !== false) {

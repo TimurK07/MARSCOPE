@@ -96,7 +96,7 @@ describe('mission checks', () => {
     expect(checks.find((c) => c.id === 'walkback-time')!.limit).toBe('≤ 60 min')
   })
 
-  it('fails when part of the route has no safe way back', () => {
+  it('fails when part of the route has no way back within the slope limit', () => {
     const checks = buildChecks({ evaSeconds: 3600, walkBack: back(500, 600, false) })
     expect(checks.find((c) => c.id === 'walkback-distance')!.ok).toBe(false)
     expect(checks.find((c) => c.id === 'walkback-time')!.ok).toBe(false)

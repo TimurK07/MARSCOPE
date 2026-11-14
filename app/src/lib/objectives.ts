@@ -19,7 +19,7 @@ export const ROUTE_MODES: { id: RouteMode; label: string; short: string; summary
     label: 'Energy-efficient',
     short: 'Least walking energy',
     summary:
-      'Minimises predicted walking energy. It usually takes a shorter, more direct line and accepts slower, steeper walking. The energy model is an approximation: Santee et al. (2001), derived from walking on Earth and scaled to Mars gravity.',
+      'Minimises predicted walking energy. It usually takes a shorter, more direct line and accepts slower, steeper walking. The energy model is an approximation: Santee et al. (2001), from treadmill walking on Earth with light loads. Mars gravity enters its climb and descent terms only; the level-walking term, most of the total, is the Earth value.',
   },
   {
     id: 'cautious',

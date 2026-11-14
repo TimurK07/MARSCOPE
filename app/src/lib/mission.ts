@@ -99,22 +99,22 @@ export function buildChecks(i: MissionInput): Check[] {
     {
       id: 'walkback-distance',
       label: 'Way back to habitat: distance',
-      value: lost ? 'no safe way back' : open ? 'not verified' : kmUp(back.maxDistance),
+      value: lost ? 'no way back' : open ? 'not verified' : kmUp(back.maxDistance),
       limit: `≤ ${fmtKm(distLimit).replace('.00', '')}`,
       ok: distOk,
       state: state(distOk),
       ratio: lost ? Infinity : open ? 0 : back.maxDistance / distLimit,
-      margin: lost ? 'part of the route has no safe return' : open ? notVerified : distanceMargin(back.maxDistance, distLimit),
+      margin: lost ? 'part of the route has no way back within the slope limit' : open ? notVerified : distanceMargin(back.maxDistance, distLimit),
     },
     {
       id: 'walkback-time',
       label: `Way back to habitat: time at ≤ ${PLANNING_PACE.max_kmh} km/h`,
-      value: lost ? 'no safe way back' : open ? 'not verified' : minUp(back.maxTime),
+      value: lost ? 'no way back' : open ? 'not verified' : minUp(back.maxTime),
       limit: `≤ ${Math.round(timeLimit / 60)} min`,
       ok: timeOk,
       state: state(timeOk),
       ratio: lost ? Infinity : open ? 0 : back.maxTime / timeLimit,
-      margin: lost ? 'part of the route has no safe return' : open ? notVerified : timeMargin(back.maxTime, timeLimit),
+      margin: lost ? 'part of the route has no way back within the slope limit' : open ? notVerified : timeMargin(back.maxTime, timeLimit),
     },
   ]
 }
