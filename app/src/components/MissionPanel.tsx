@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { adviceFor } from '../lib/advice'
-import { buildChecks } from '../lib/mission'
+import { buildChecks, type Verdict } from '../lib/mission'
 import { CAUTION_WEIGHT, ROUTE_MODES, type RouteMode } from '../lib/objectives'
 import type { ModeSummary } from '../lib/planner'
-import { EVA, MAX_SLOPE_DEG, RADIATION } from '../lib/model'
+import { MAX_SLOPE_DEG, RADIATION, RETURN_LIMITS } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
 import { Datum, Icon, Section, Segmented } from './ui'
 
@@ -18,7 +18,7 @@ interface Props {
   compact?: boolean
 }
 
-const VERDICT_SHORT: Record<Verdict, string> = { standby: '—', go: 'GO', nogo: 'NO-GO', noroute: 'NO ROUTE' }
+const VERDICT_SHORT: Record<Verdict, string> = { standby: '—', go: 'GO', nogo: 'NO-GO', unverified: 'UNVERIFIED', noroute: 'NO ROUTE' }
 
 /** The three routes for the same checkpoints, measured the same way, side by side. */
 function ModeComparison(props: {
@@ -104,8 +104,8 @@ function ModeComparison(props: {
         <b>{current.label}.</b> {current.summary}
       </p>
       <p className="footnote">
-        All three routes obey the same hard limits: {MAX_SLOPE_DEG}° maximum slope, no clipping of no-go cells, and the same
-        EVA and walk-back checks. They are measured the same way; the lowest value in each row is underlined. Walking
+        All three routes obey the same hard limits: {MAX_SLOPE_DEG}° maximum slope for every cell and every step walked, no
+        clipping of no-go cells, and the same EVA and return checks. They are measured the same way; the lowest value in each row is underlined. Walking
         energy is an approximation adapted from research on Earth (Santee et al. 2001) and scaled to Mars gravity.
         Cautious weights time on hidden steep ground by 1 + {CAUTION_WEIGHT} × the cell's steep share: a heuristic
         coefficient of ours, not a NASA-certified safety model and not a measured risk. Each route is the least-cost
@@ -119,16 +119,20 @@ function ModeComparison(props: {
 /** Signed saving: positive means the straightened path is shorter or quicker. */
 const fmtSaved = (v: number) => `${v >= 0 ? '−' : '+'}${Math.abs(v).toFixed(v >= 100 ? 0 : 1)}`
 
-export type Verdict = 'standby' | 'go' | 'nogo' | 'noroute'
+export type { Verdict } from '../lib/mission'
 
 export function verdictOf(s: PlanState): Verdict {
-  return !s.plan ? 'standby' : s.plan.error ? 'noroute' : s.go ? 'go' : 'nogo'
+  // GO only when the planner itself says so; anything unsettled is never shown as GO.
+  if (!s.plan) return 'standby'
+  if (s.plan.error) return 'noroute'
+  return s.verdict === 'go' && s.go ? 'go' : s.verdict === 'unverified' ? 'unverified' : 'nogo'
 }
 
 export const VERDICT_TITLE: Record<Verdict, string> = {
   standby: 'STANDBY',
   go: 'GO',
   nogo: 'NO-GO',
+  unverified: 'UNVERIFIED',
   noroute: 'NO ROUTE',
 }
 
@@ -155,6 +159,12 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
         )}
         {verdict === 'go' && <p>Route is within all mission constraints.</p>}
         {verdict === 'noroute' && <p>{plan?.error}</p>}
+        {verdict === 'unverified' && (
+          <p>
+            The return to the habitat could not be verified: the calculation limit was reached. This is not a confirmed
+            violation, and it is not a GO.
+          </p>
+        )}
         {verdict === 'nogo' && (
           <ul className="m-fail">
             {failed.map((c) => (
@@ -215,7 +225,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
   // Constraints open themselves when the plan turns NO-GO.
   const [constraintsOpen, setConstraintsOpen] = useState(true)
   useEffect(() => {
-    if (verdict === 'nogo') setConstraintsOpen(true)
+    if (verdict === 'nogo' || verdict === 'unverified') setConstraintsOpen(true)
   }, [verdict])
 
   const adviceInput = ready
@@ -370,7 +380,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
         title="Mission constraints"
         open={constraintsOpen}
         onToggle={setConstraintsOpen}
-        aside={checks ? `${checks.length - failed.length} of ${checks.length} met` : undefined}
+        aside={checks ? `${checks.length - failed.length} of ${checks.length} met${verdict === 'unverified' ? ', not verified' : ''}` : undefined}
       >
         <p className={`feasible ${verdict === 'noroute' ? 'is-bad' : ready ? 'is-ok' : ''}`}>
           <b>Route feasibility</b>
@@ -386,7 +396,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           {(checks ?? idleChecks).map((c) => {
             const advice = checks && !c.ok && adviceInput ? adviceFor(c.id, adviceInput) : null
             return (
-              <li key={c.id} className={!checks ? 'idle' : c.ok ? 'ok' : 'bad'}>
+              <li key={c.id} className={!checks ? 'idle' : c.ok ? 'ok' : c.state === 'unverified' ? 'unv' : 'bad'}>
                 <div className="limit-row">
                   <span>{c.label}</span>
                   <code>
@@ -403,11 +413,13 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           })}
         </ul>
         <p className="footnote">
-          Duration and the 2 km walking range are from NASA EVA-EXP-0075. We apply the range to the actual walk-back
-          path. The {EVA.walkBackTime_min} min walk-back time is our reading of the same document (2 km at about 2 km/h,
-          one hour of secondary oxygen), not a NASA requirement. Walking back is computed over the terrain towards the
-          habitat, so a climb home counts as slower than the walk out. It uses the grid path before straightening, so
-          it can read slightly longer than the straightened route on the map; the difference is on the safe side.
+          The return limits ({RETURN_LIMITS.distance_m / 1000} km and {RETURN_LIMITS.time_s / 60} min) are MARSCOPE planning
+          assumptions that can be changed in the model, not NASA requirements for Mars. They are adapted from NASA
+          EVA-EXP-0075, a summary of the Artemis lunar EVA concept (walking excursions within a 2 km radius, about 2 km/h,
+          one hour of secondary oxygen), which is also the source of the 8-hour duration. A plan passes only if, from
+          every point of the route, one and the same way back meets both limits; the two figures above describe that
+          path from the worst point. Ways back follow the terrain grid towards the habitat, so a climb home counts as
+          slower than the walk out, and they are not straightened, which errs on the careful side.
         </p>
       </Section>
 

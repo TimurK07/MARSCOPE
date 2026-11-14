@@ -5,7 +5,7 @@
 
 import { fmtDur, fmtKm } from './format'
 import { EVA, surfaceDistanceM } from './model'
-import type { WalkBack } from './router'
+import type { WalkBack } from './returnCheck'
 import type { LatLon } from './terrain'
 
 export interface AdviceInput {
@@ -40,16 +40,21 @@ export function durationAdvice(a: AdviceInput): string {
   return `Reduce time at each target to ${maxStop} min or less (now ${a.stopMinutes} min), or remove a target.`
 }
 
-/** Where the walk back is longest or slowest, and what to change. */
+/** Where the way back fails, and what to change. Both figures describe the same return path. */
 export function walkBackAdvice(a: AdviceInput, kind: 'distance' | 'time'): string {
   const back = a.walkBack
   if (!back || !back.reachable) {
     return 'Part of this route has no safe way back to the habitat within the slope limit. Move the checkpoint or the habitat.'
   }
-  if (kind === 'distance') {
-    return `The longest way back is ${fmtKm(back.maxDistance)}, from a point near ${nearestCheckpoint(a.points, back.maxDistanceAt)}. Move it closer to the habitat, or move the habitat.`
+  const where = nearestCheckpoint(a.points, kind === 'distance' ? back.maxDistanceAt : back.maxTimeAt)
+  if (!back.verified) {
+    return `From a point near ${where}, the search for a way back within both limits reached its calculation limit. This is not a confirmed violation, and it is not a pass. Move that checkpoint closer to the habitat to get a definite answer.`
   }
-  return `The slowest way back takes ${fmtDur(back.maxTime)}, from a point near ${nearestCheckpoint(a.points, back.maxTimeAt)}. Move that checkpoint, or choose a habitat site that is quicker to return to.`
+  const path = `${fmtKm(back.maxDistance)} in ${fmtDur(back.maxTime)}`
+  if (kind === 'distance') {
+    return `From a point near ${where}, no way back is within both limits; the best found is ${path}, which is too long. Move it closer to the habitat, or move the habitat.`
+  }
+  return `From a point near ${where}, no way back is within both limits; the best found is ${path}, which is too slow. Move that checkpoint, or choose a habitat site that is quicker to return to.`
 }
 
 export function adviceFor(checkId: string, a: AdviceInput): string | null {

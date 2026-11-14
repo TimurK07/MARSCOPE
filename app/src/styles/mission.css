@@ -439,3 +439,23 @@
     min-height: 40px;
   }
 }
+
+/* not verified: neither a pass nor a confirmed violation */
+.m-status-unverified {
+  border-top-color: var(--warn);
+  background: rgb(224 178 70 / 0.07);
+}
+.m-status-unverified strong {
+  color: var(--warn);
+  font-size: 30px;
+}
+.limits .unv .limit-row code b,
+.limits .unv .limit-margin {
+  color: var(--warn);
+}
+.limits .unv .limit-advice {
+  border-left-color: var(--warn);
+}
+.cmp td.v-unverified {
+  color: var(--warn);
+}

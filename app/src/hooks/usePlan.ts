@@ -102,6 +102,7 @@ export function usePlan(terrain: Terrain | null) {
   // Mission-level checks apply only to a feasible route, and are the same for every priority.
   const checks = selected?.checks ?? null
   const go = selected?.verdict === 'go'
+  const verdict = selected?.verdict ?? 'standby'
 
   return {
     points,
@@ -122,6 +123,8 @@ export function usePlan(terrain: Terrain | null) {
     comparison,
     checks,
     go,
+    /** Verdict of the selected priority. */
+    verdict,
     evaSeconds,
     doseMsv,
     energyKcal,

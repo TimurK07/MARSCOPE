@@ -1,12 +1,15 @@
 // Prints the example mission as the current code computes it. Used to record
 // before/after numbers; it asserts nothing about specific values.
 import { writeFileSync } from 'node:fs'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { buildChecks } from '../src/lib/mission'
 import { findLeg, walkBack } from '../src/lib/router'
 import { EXAMPLE, loadTerrainFromDisk } from './loadTerrain'
 
-it('captures the example mission', () => {
+// These tests search the full 1024 x 1024 grid; when the whole suite runs in parallel they need more than the default 5 s.
+vi.setConfig({ testTimeout: 120_000 })
+
+it('captures the example mission', { timeout: 120_000 }, () => {
   const t = loadTerrainFromDisk()
   const seq = [...EXAMPLE, EXAMPLE[0]]
   let dist = 0

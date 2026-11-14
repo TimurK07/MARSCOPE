@@ -1,6 +1,6 @@
 // Three routing modes on the real Gale terrain: invariants, a comparison table and timings.
 import { writeFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MAX_SLOPE_DEG } from '../src/lib/model'
 import { ROUTE_MODES } from '../src/lib/objectives'
 import { lineCells } from '../src/lib/pathGeometry'
@@ -8,6 +8,9 @@ import { computeAllPlans, computePlan, summarise, type Plan } from '../src/lib/p
 import { cellAt } from '../src/lib/terrain'
 import { isWalkable } from '../src/lib/router'
 import { EXAMPLE, loadTerrainFromDisk } from './loadTerrain'
+
+// These tests search the full 1024 x 1024 grid; when the whole suite runs in parallel they need more than the default 5 s.
+vi.setConfig({ testTimeout: 120_000 })
 
 const t = loadTerrainFromDisk()
 const MASS = 180
@@ -35,7 +38,7 @@ describe('three modes on the real terrain', () => {
   const report: Record<string, unknown> = {}
 
   for (const [name, input] of Object.entries(MISSIONS)) {
-    it(`${name}: every mode is safe, complete and held to the same checks`, () => {
+    it(`${name}: every mode is safe, complete and held to the same checks`, { timeout: 120_000 }, () => {
       const plans = computeAllPlans(t, input)
       const rows: Record<string, unknown> = {}
       for (const m of ROUTE_MODES) {

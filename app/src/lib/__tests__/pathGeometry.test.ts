@@ -189,7 +189,7 @@ describe('straightening a route', () => {
 
   it('keeps the grid path when a straight line would be slower', () => {
     // A ridge lies across the direct line; the grid path goes round it on the level.
-    const ridge = (x: number, y: number) => (y >= 8 && y <= 22 ? 6 * Math.exp(-((x - 15) ** 2) / 8) : 0)
+    const ridge = (x: number, y: number) => (y >= 8 && y <= 22 ? 4 * Math.exp(-((x - 15) ** 2) / 8) : 0)
     const t = makeTerrain(30, 30, () => 5, ridge)
     const res = findLeg(t, at(t, 3, 15), at(t, 27, 15))
     expect(res.ok).toBe(true)

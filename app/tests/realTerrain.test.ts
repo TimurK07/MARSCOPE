@@ -1,10 +1,13 @@
 // Safety invariants checked on the real Gale terrain grid.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MAX_SLOPE_DEG } from '../src/lib/model'
 import { lineCells } from '../src/lib/pathGeometry'
 import { findLeg, isWalkable, walkBack } from '../src/lib/router'
 import { cellAt, elevationAt, hiddenSteepShare, slopeAt } from '../src/lib/terrain'
 import { EXAMPLE, loadTerrainFromDisk } from './loadTerrain'
+
+// These tests search the full 1024 x 1024 grid; when the whole suite runs in parallel they need more than the default 5 s.
+vi.setConfig({ testTimeout: 120_000 })
 
 const t = loadTerrainFromDisk()
 

@@ -3,15 +3,18 @@
 //
 // A straight shortcut is accepted only when all of these hold:
 //   1. every cell the line passes through is walkable, including both cells
-//      beside any grid corner the line touches;
+//      beside any grid corner the line touches; every move from one crossed
+//      cell to the next, and every piece of the line as it is walked, is
+//      within the slope limit;
 //   2. by the objective the route is optimised for (time, energy, or the
 //      cautious weighting), it costs no more than the grid path it replaces;
 //   3. it does not cross more hidden steep ground, in total, than the path it replaces.
 // A shorter line is therefore not assumed to be better: it has to prove it.
 
-import { MAX_SLOPE_DEG, segmentEnergy, walkingSpeedMs } from './model'
+import { segmentEnergy, walkingSpeedMs } from './model'
 import { timeObjective, type Objective } from './objectives'
-import { elevationAtPoint, hiddenSteepShare, pointToLatLon, slopeAt, type LatLon, type Terrain } from './terrain'
+import { elevationAt, elevationAtPoint, hiddenSteepShare, pointToLatLon, slopeAt, type LatLon, type Terrain } from './terrain'
+import { gradeAllowed, gradeDeg, isWalkable } from './traverse'
 
 export interface PathSample extends LatLon {
   /** Distance from the start, metres, along the surface. */
@@ -53,13 +56,13 @@ export interface PathMeasure {
 
 const walkable = (t: Terrain, x: number, y: number): boolean => {
   if (x < 0 || y < 0 || x >= t.width || y >= t.height) return false
-  const s = slopeAt(t, y * t.width + x)
-  return !Number.isNaN(s) && s <= MAX_SLOPE_DEG
+  return isWalkable(t, y * t.width + x)
 }
 
 /**
  * Cells the straight line between two cell centres passes through, in order.
- * Returns null when the line would touch ground that is not walkable.
+ * Returns null when the line would touch ground that is not walkable, or when
+ * moving from one crossed cell to the next is steeper than the slope limit.
  *
  * Integer arithmetic keeps the corner case exact: when the line passes through
  * the corner shared by four cells, the two cells beside it are checked as well,
@@ -76,7 +79,11 @@ export function lineCells(t: Terrain, x0: number, y0: number, x1: number, y1: nu
   const cells = [y * t.width + x]
   let ix = 0
   let iy = 0
+  const cx = t.meta.cellSizeX_m
+  const cy = t.meta.cellSizeY_m
   while (ix < nx || iy < ny) {
+    const px = x
+    const py = y
     // Where the line next crosses a vertical / horizontal cell border, on a common scale.
     const tx = (1 + 2 * ix) * ny
     const ty = (1 + 2 * iy) * nx
@@ -96,7 +103,11 @@ export function lineCells(t: Terrain, x0: number, y0: number, x1: number, y1: nu
       iy++
     }
     if (!walkable(t, x, y)) return null
-    cells.push(y * t.width + x)
+    const cell = y * t.width + x
+    // The move between the two cells must itself be within the slope limit.
+    const dz = elevationAt(t, cell) - elevationAt(t, py * t.width + px)
+    if (!gradeAllowed(gradeDeg(dz, Math.hypot((x - px) * cx, (y - py) * cy)))) return null
+    cells.push(cell)
   }
   return cells
 }
@@ -109,6 +120,8 @@ interface Totals {
   perKg: number
   fixed: number
   cost: number
+  /** True once any piece walked was steeper than the slope limit. */
+  tooSteep: boolean
 }
 
 /**
@@ -131,7 +144,8 @@ function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number,
     const fy = y0 + 0.5 + ((y1 - y0) * i) / n
     const z = elevationAtPoint(t, fx, fy)
     const dz = z - zPrev
-    const grade = (Math.atan2(dz, d) * 180) / Math.PI
+    const grade = gradeDeg(dz, d)
+    if (!gradeAllowed(grade)) tot.tooSteep = true
     const speed = walkingSpeedMs(grade)
     tot.dist += Math.hypot(d, dz)
     tot.time += d / speed
@@ -151,13 +165,13 @@ function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number,
   }
 }
 
-const zero = (): Totals => ({ dist: 0, time: 0, ascent: 0, descent: 0, perKg: 0, fixed: 0, cost: 0 })
+const zero = (): Totals => ({ dist: 0, time: 0, ascent: 0, descent: 0, perKg: 0, fixed: 0, cost: 0, tooSteep: false })
 
-/** Cost of the straight line between two cell centres, by the given objective. */
+/** Cost of the straight line between two cell centres, by the given objective. Infinite when a piece of it is too steep to walk. */
 function segmentCost(t: Terrain, x0: number, y0: number, x1: number, y1: number, obj: Objective): number {
   const tot = zero()
   walkSegment(t, x0, y0, x1, y1, tot, null, obj)
-  return tot.cost
+  return tot.tooSteep ? Infinity : tot.cost
 }
 
 /**
@@ -172,8 +186,9 @@ const hiddenAlong = (t: Terrain, cells: number[]): number => {
 
 /**
  * Measures a path given as cell indices joined by straight lines.
- * Returns null if any line touches ground that is not walkable: an unsafe
- * path is never measured as if it were usable.
+ * Returns null if any line touches ground that is not walkable, or any piece
+ * of it is steeper than the slope limit: an unsafe path is never measured as
+ * if it were usable.
  */
 export function measurePath(t: Terrain, vertices: number[], obj: Objective = timeObjective()): PathMeasure | null {
   const w = t.width
@@ -196,6 +211,7 @@ export function measurePath(t: Terrain, vertices: number[], obj: Objective = tim
     for (const c of cells) crossed.add(c)
     hiddenLoad += hiddenAlong(t, cells)
     walkSegment(t, x(a), y(a), x(b), y(b), tot, samples, obj)
+    if (tot.tooSteep) return null
   }
   let maxSlope = 0
   let hiddenMax: number | null = t.subSteep ? 0 : null

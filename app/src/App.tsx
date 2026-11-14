@@ -649,7 +649,7 @@ export default function App() {
         >
           {sheetTab === 'mission' && (
             <>
-              {verdictOf(plan) === 'nogo' && (
+              {(verdictOf(plan) === 'nogo' || verdictOf(plan) === 'unverified') && (
                 <div className="sheet-fail">
                   <ul className="m-fail">
                     {failed.map((c) => (

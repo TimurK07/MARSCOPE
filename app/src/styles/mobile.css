@@ -273,3 +273,7 @@
 .is-mobile .gl-mission small {
   display: none;
 }
+
+.sheet-verdict.v-unverified {
+  color: var(--warn);
+}

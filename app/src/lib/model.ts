@@ -10,9 +10,10 @@ export const MARS_RADIUS_M = 3_396_190
 export const MARS_GRAVITY = 3.73
 
 /**
- * Steepest terrain a suited crew member is expected to walk on.
- * NASA EVA-EXP-0075 (Artemis EVA concept of operations): "walking up/down/across
- * a slope of up to 20°".
+ * Steepest ground the planner lets a route cross, for cells and for every step
+ * between cells. From NASA EVA-EXP-0075 (Artemis lunar EVA concept of
+ * operations summary), which lists as a suit capability: "walking
+ * up/down/across a slope of up to 20°". Applying it to Mars is our assumption.
  */
 export const MAX_SLOPE_DEG = 20
 
@@ -55,22 +56,34 @@ export function segmentEnergy(distM: number, gradeDeg: number, speedMs: number):
   return { perKg: 3.28 * level + slopePerKg, fixed: 71.1 * level }
 }
 
-/** EVA limits from NASA EVA-EXP-0075 (Exploration EVA System Concept of Operations). */
+/**
+ * Longest EVA. NASA EVA-EXP-0075, a 2020 summary of the Artemis lunar-surface
+ * EVA concept of operations, lists as a suit capability: "Supports EVAs of up
+ * to 8 hours in duration (6±2 hours)". We use it as a planning limit for Mars.
+ */
 export const EVA = {
-  /** "Supports EVAs of up to 8 hours in duration (6±2 hours)". */
   maxDuration_h: 8,
-  /**
-   * Walking EVAs stay within 2 km of the lander/habitat. The document states this
-   * as a radius. We apply it to the length of the actual walk-back path, which is
-   * never shorter than the straight line, so this is the stricter reading.
-   */
-  walkRadius_km: 2,
-  /**
-   * Walk-back time limit, minutes. This is our reading, not a NASA requirement:
-   * the same document plans walking EVAs within 2 km at about 2 km/h, i.e. about
-   * one hour to walk back, and gives one hour of secondary oxygen on the suit.
-   */
-  walkBackTime_min: 60,
+}
+
+/**
+ * Return-to-habitat limits. These are MARSCOPE planning assumptions, kept here
+ * so they can be changed. They are NOT NASA requirements for Mars EVAs.
+ *
+ * A plan passes only if, from every point of the route, one and the same way
+ * back is within both limits (see returnCheck.ts).
+ *
+ * Where the numbers come from: the same NASA document describes lunar walking
+ * excursions of up to a 2 km radius from the lander ("TBR", "depending on
+ * terrain"), assumes about 2 km/h on fairly level regolith, and notes that
+ * secondary oxygen on the suit provides an additional hour. We apply 2 km to
+ * the length of the way back over the terrain, which is never shorter than
+ * the straight line, and one hour to its duration.
+ */
+export const RETURN_LIMITS = {
+  /** Longest acceptable way back, metres. */
+  distance_m: 2000,
+  /** Slowest acceptable way back, seconds. */
+  time_s: 3600,
 }
 
 export const RADIATION = {

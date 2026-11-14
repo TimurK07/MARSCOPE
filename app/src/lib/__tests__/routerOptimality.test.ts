@@ -33,6 +33,8 @@ function dijkstraTime(t: Terrain, sx: number, sy: number, gx: number, gy: number
       if (DX[k] !== 0 && DY[k] !== 0 && (!isWalkable(t, y * t.width + nx) || !isWalkable(t, ny * t.width + x))) continue
       const d = Math.hypot(DX[k] * CELL, DY[k] * CELL)
       const grade = (Math.atan2(elev(v) - elev(u), d) * 180) / Math.PI
+      // Written out here on purpose, apart from the planner's own rule: no step steeper than 20 degrees.
+      if (Math.abs(grade) > 20) continue
       const cand = dist[u] + d / walkingSpeedMs(grade)
       if (cand < dist[v]) dist[v] = cand
     }

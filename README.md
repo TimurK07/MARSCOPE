@@ -32,7 +32,7 @@ The local view is a map-first workspace: a tool rail on the left, the map in the
   - **Surface view**: the Navcam frames Curiosity took at a selected stop, with local solar time and camera azimuth.
 - **Slope-limited route planner.** The fastest walking route over the terrain grid that never crosses a cell steeper than NASA's 20° limit. The staircase a grid search gives is straightened only where the straight line stays on walkable ground, is no slower, and crosses no more hidden steep ground. Checkpoints can be dragged, reordered and removed, with undo.
 - **Three route priorities.** Fastest, Energy-efficient and Cautious routes for the same checkpoints, compared side by side: distance, walking time, walking energy and hidden steep ground. All three obey the same slope limit and the same mission checks; Walking energy is an approximation adapted from research on Earth (Santee et al. 2001), scaled to Mars gravity. Cautious uses a heuristic weight of ours, not a NASA-certified safety model. Each route is optimal on the 4 m grid for its own objective; the straightened route is not proven optimal, and no priority guarantees safety. Routes are computed in a Web Worker.
-- **Mission status.** STANDBY, GO, NO-GO or NO ROUTE, always visible with distance, EVA duration, climb and energy. On NO-GO the panel names the failed constraint and says what would fix it, for example the longest stop time that still fits the 8-hour limit.
+- **Mission status.** STANDBY, GO, NO-GO, NO ROUTE or UNVERIFIED (the return calculation reached its limit: not a pass and not a confirmed violation), always visible with distance, EVA duration, climb and energy. On NO-GO the panel names the failed constraint and says what would fix it, for example the longest stop time that still fits the 8-hour limit.
 - **Mobile.** A full-screen map with a bottom sheet that snaps to three heights.
 - **Conditions at Gale.** The latest weather report from Curiosity's REMS station.
 
@@ -41,7 +41,9 @@ The local view is a map-first workspace: a tool rail on the left, the map in the
 ```
 app/                 Web app (Vite + React + TypeScript + Leaflet), no backend
   src/lib/model.ts   Physical model: every constant with its source
-  src/lib/router.ts  A* least-time route search over the terrain grid, walk-back search
+  src/lib/traverse.ts The hard limits: which cells and which steps may be walked at all
+  src/lib/router.ts  A* route search over the terrain grid
+  src/lib/returnCheck.ts Return to the habitat: one way back within both the distance and the time limit
   src/lib/pathGeometry.ts Line-of-sight checks, path measuring, safe straightening
   src/lib/mission.ts GO / NO-GO checks
   src/lib/objectives.ts The three route priorities and their cost functions
@@ -98,8 +100,8 @@ The study area is a 1024 × 1024 grid (about 4 m per cell) cut from the MRO HiRI
 
 - **Walking speed vs slope** follows Marquez (2008), derived from Apollo traverse data, as implemented in the SEXTANT planner used by NASA's BASALT programme.
 - **Metabolic cost** follows Santee et al. (2001), with Mars gravity of 3.73 m/s². It covers walking only; work at the targets is not modelled.
-- **Slope limit of 20°**, **EVA duration of 8 hours** and **2 km walking range** come from NASA EVA-EXP-0075 (Exploration EVA System Concept of Operations). The route never clips no-go cells diagonally, and slope is stored rounded up so the limit is strict.
-- **Walk back.** From every point of the route we compute the fastest safe way back to the habitat over the terrain. The plan must keep the longest of these within 2 km and the slowest within 60 minutes. The 60 minutes is our reading of the same NASA document, not a NASA requirement.
+- **Slope limit of 20°** and **EVA duration of 8 hours** are suit capabilities listed in NASA EVA-EXP-0075, a 2020 summary of the Artemis lunar EVA concept of operations. Using them for Mars is our assumption. The 20° limit applies to every cell and to every step actually walked: a step between two cells is refused when the rise between them, over the horizontal length of the step, is steeper than 20°, even if both cells read as walkable. Straightened routes are checked the same way, move by move and piece by piece. The route never clips no-go cells diagonally, slope is stored rounded up, and cells without data are not walkable.
+- **Return to the habitat.** From every point of the route there must be one way back that is no longer than 2 km and takes no more than 60 minutes. Both limits are judged on the same path: the shortest way back and the fastest way back are usually different paths, so checking each limit on its own best path would be wrong in both directions. The planner decides this exactly (a shortest-path search with a resource constraint) and uses the same answer for all three priorities. **The 2 km and 60 minutes are MARSCOPE planning assumptions, set in `model.ts`, not NASA requirements for Mars.** They are adapted from the same NASA document: lunar walking excursions within a 2 km radius, about 2 km/h, one hour of secondary oxygen.
 - **Radiation**: 0.67 mSv/day, the average galactic cosmic ray dose equivalent Curiosity's RAD measured in Gale crater (Hassler et al., 2014), compared with the 600 mSv career limit of NASA-STD-3001.
 
 The suited mass and the time spent at each target are planning inputs the user sets. Links to every source are in the app and in [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md).
