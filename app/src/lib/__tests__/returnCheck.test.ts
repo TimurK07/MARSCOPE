@@ -2,7 +2,7 @@
 // limit together. The planner's answer is compared with two references written
 // here from scratch: every simple path on tiny grids, and full Pareto fronts on
 // larger random ones.
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { walkingSpeedMs } from '../model'
 import { buildChecks, missionVerdict } from '../mission'
 import { computeAllPlans, summarise } from '../planner'
@@ -15,6 +15,14 @@ const DX = [1, 1, 0, -1, -1, -1, 0, 1]
 const DY = [0, 1, 1, 1, 0, -1, -1, -1]
 
 // ---- the rules, written out again for the references (nothing shared with the planner but the speed model)
+/** The planning pace, written out here: the model's speed, never above 2000 m in 3600 s. */
+const planning = (g: number) => Math.min(walkingSpeedMs(g), 2000 / 3600)
+/** The speed the references walk at. The return check uses the planning pace unless told otherwise. */
+let SPEED: (g: number) => number = planning
+const BOTH_SPEEDS: [string, (g: number) => number][] = [
+  ['at the planning pace', planning],
+  ['at the model speed', walkingSpeedMs],
+]
 const slopeOf = (t: Terrain, i: number) => (t.slopeRaw[i] === 65535 ? NaN : t.slopeRaw[i] * 0.01)
 const okCell = (t: Terrain, i: number) => !Number.isNaN(slopeOf(t, i)) && slopeOf(t, i) <= 20
 const elev = (t: Terrain, i: number) => t.elevRaw[i] * t.meta.elevation.scale_m
@@ -32,7 +40,7 @@ function step(t: Terrain, u: number, k: number): { v: number; d: number; s: numb
   const dz = elev(t, v) - elev(t, u)
   const grade = (Math.atan2(dz, len) * 180) / Math.PI
   if (!(Math.abs(grade) <= 20)) return null
-  return { v, d: Math.hypot(len, dz), s: len / walkingSpeedMs(grade) }
+  return { v, d: Math.hypot(len, dz), s: len / SPEED(grade) }
 }
 
 /** Reference 1: walk every simple path from a cell to the habitat. Tiny grids only. */
@@ -114,7 +122,13 @@ function randomTerrain(rand: () => number, size: number): Terrain {
   )
 }
 
-describe('one way back within both limits: against every simple path', () => {
+describe.each(BOTH_SPEEDS)('one way back within both limits: against every simple path, %s', (_name, speed) => {
+  beforeAll(() => {
+    SPEED = speed
+  })
+  afterAll(() => {
+    SPEED = planning
+  })
   it('agrees on 4 x 4 grids for every cell and many limits', () => {
     const rand = rng(41)
     let yes = 0
@@ -125,7 +139,7 @@ describe('one way back within both limits: against every simple path', () => {
       if (!okCell(t, home)) continue
       for (let m = 0; m < 4; m++) {
         const lim = { distance_m: 6 + rand() * 30, time_s: 4 + rand() * 60 }
-        const field = new WalkBackField(t, at(t, home % 4, Math.floor(home / 4)), lim)
+        const field = new WalkBackField(t, at(t, home % 4, Math.floor(home / 4)), lim, undefined, speed)
         for (let c = 0; c < 16; c++) {
           if (!okCell(t, c)) continue
           const want = existsByEnumeration(t, c, home, lim)
@@ -146,7 +160,13 @@ describe('one way back within both limits: against every simple path', () => {
   })
 })
 
-describe('one way back within both limits: against full Pareto fronts', () => {
+describe.each(BOTH_SPEEDS)('one way back within both limits: against full Pareto fronts, %s', (_name, speed) => {
+  beforeAll(() => {
+    SPEED = speed
+  })
+  afterAll(() => {
+    SPEED = planning
+  })
   it('agrees for every cell, with limits placed in the gaps between the trade-offs', () => {
     const rand = rng(7)
     let checked = 0
@@ -171,7 +191,7 @@ describe('one way back within both limits: against full Pareto fronts', () => {
       }
       trials.push({ distance_m: size * CELL * 0.9, time_s: 40 })
       for (const lim of trials) {
-        const field = new WalkBackField(t, at(t, home % size, Math.floor(home / size)), lim)
+        const field = new WalkBackField(t, at(t, home % size, Math.floor(home / size)), lim, undefined, speed)
         for (let c = 0; c < size * size; c++) {
           if (!okCell(t, c)) continue
           const want = all[c].some(([d, s]) => d <= lim.distance_m && s <= lim.time_s)
@@ -208,8 +228,8 @@ describe('one way back within both limits: against full Pareto fronts', () => {
     const f = [...all.find((x) => x.length >= 3)!].sort((p, q) => p[0] - q[0])
     const lim = { distance_m: (f[0][0] + f[1][0]) / 2, time_s: (f[0][1] + f[1][1]) / 2 }
     const cells = [...Array(144).keys()].filter((c) => okCell(t, c))
-    const forward = new WalkBackField(t, at(t, 6, 5), lim)
-    const backward = new WalkBackField(t, at(t, 6, 5), lim)
+    const forward = new WalkBackField(t, at(t, 6, 5), lim, undefined, speed)
+    const backward = new WalkBackField(t, at(t, 6, 5), lim, undefined, speed)
     const a = cells.map((c) => forward.cell(c)!.feasible)
     const b = [...cells].reverse().map((c) => backward.cell(c)!.feasible).reverse()
     expect(a).toEqual(b)
@@ -290,7 +310,8 @@ describe('return check: direction, dead ends and missing data', () => {
     const back = paretoFronts(t, 4 * 60 + 5)[4 * 60 + 50]
     const outTime = Math.min(...out.map((p) => p[1]))
     const backTime = Math.min(...back.map((p) => p[1]))
-    expect(backTime).toBeGreaterThan(outTime * 2)
+    // At the planning pace the walk down is capped at 2 km/h; the climb home is slower still.
+    expect(backTime).toBeGreaterThan(outTime * 1.5)
     // A time limit between the two: the walk out would fit, the way back does not.
     const lim = { distance_m: 1e6, time_s: (outTime + backTime) / 2 }
     expect(walkBack(t, home, [down], lim)!.feasible).toBe(false)
@@ -380,7 +401,7 @@ describe('the path behind the figures', () => {
 })
 
 describe('exactly at the limits', () => {
-  // Level ground, straight back along a row: 40 steps of 4 m at 1.6 m/s.
+  // Level ground, straight back along a row: 40 steps of 4 m, walked at the planning pace.
   const t = makeTerrain(60, 5, () => 0)
   const home = at(t, 5, 2)
   const point = at(t, 45, 2)
@@ -398,7 +419,8 @@ describe('exactly at the limits', () => {
 
   it('knows the straight way back to the last digit', () => {
     expect(D).toBe(160)
-    expect(Math.abs(T - 100)).toBeLessThan(1e-9)
+    // 160 m at the planning pace of 2000 m per 3600 s: 288 s. (The model alone would take 100 s.)
+    expect(Math.abs(T - 288)).toBeLessThan(1e-9)
   })
 
   it('passes when the way back is exactly as long and as slow as allowed', () => {

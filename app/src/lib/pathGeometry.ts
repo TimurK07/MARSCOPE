@@ -11,7 +11,7 @@
 //   3. it does not cross more hidden steep ground, in total, than the path it replaces.
 // A shorter line is therefore not assumed to be better: it has to prove it.
 
-import { segmentEnergy, walkingSpeedMs } from './model'
+import { planningSpeedMs, segmentEnergy, walkingSpeedMs } from './model'
 import { timeObjective, type Objective } from './objectives'
 import { elevationAt, elevationAtPoint, hiddenSteepShare, pointToLatLon, slopeAt, type LatLon, type Terrain } from './terrain'
 import { gradeAllowed, gradeDeg, isWalkable } from './traverse'
@@ -31,7 +31,10 @@ export interface PathSample extends LatLon {
 export interface PathMeasure {
   samples: PathSample[]
   distance: number
+  /** Walking time by the speed model, seconds. */
   duration: number
+  /** Walking time of the same path with the speed capped at the planning pace, seconds. */
+  planDuration: number
   ascent: number
   descent: number
   /** Steepest terrain slope of any cell the path passes through. */
@@ -115,6 +118,7 @@ export function lineCells(t: Terrain, x0: number, y0: number, x1: number, y1: nu
 interface Totals {
   dist: number
   time: number
+  planTime: number
   ascent: number
   descent: number
   perKg: number
@@ -149,6 +153,7 @@ function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number,
     const speed = walkingSpeedMs(grade)
     tot.dist += Math.hypot(d, dz)
     tot.time += d / speed
+    tot.planTime += d / planningSpeedMs(grade)
     if (dz > 0) tot.ascent += dz
     else tot.descent -= dz
     const e = segmentEnergy(d, grade, speed)
@@ -165,7 +170,7 @@ function walkSegment(t: Terrain, x0: number, y0: number, x1: number, y1: number,
   }
 }
 
-const zero = (): Totals => ({ dist: 0, time: 0, ascent: 0, descent: 0, perKg: 0, fixed: 0, cost: 0, tooSteep: false })
+const zero = (): Totals => ({ dist: 0, time: 0, planTime: 0, ascent: 0, descent: 0, perKg: 0, fixed: 0, cost: 0, tooSteep: false })
 
 /** Cost of the straight line between two cell centres, by the given objective. Infinite when a piece of it is too steep to walk. */
 function segmentCost(t: Terrain, x0: number, y0: number, x1: number, y1: number, obj: Objective): number {
@@ -230,6 +235,7 @@ export function measurePath(t: Terrain, vertices: number[], obj: Objective = tim
     samples,
     distance: tot.dist,
     duration: tot.time,
+    planDuration: tot.planTime,
     ascent: tot.ascent,
     descent: tot.descent,
     maxSlope,

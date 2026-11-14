@@ -4,13 +4,13 @@
 // It only explains a failed check, using quantities the planner has already computed.
 
 import { fmtDur, fmtKm } from './format'
-import { EVA, surfaceDistanceM } from './model'
+import { EVA, PLANNING_PACE, surfaceDistanceM } from './model'
 import type { WalkBack } from './returnCheck'
 import type { LatLon } from './terrain'
 
 export interface AdviceInput {
   points: LatLon[]
-  /** Walking time of the whole route, seconds. */
+  /** Walking time of the whole route at the planning pace, seconds: the one the duration limit is judged on. */
   walkTime: number
   /** Time spent at each science target, minutes. */
   stopMinutes: number
@@ -31,11 +31,11 @@ export function durationAdvice(a: AdviceInput): string {
   const targets = Math.max(a.points.length - 1, 0)
   const budget = EVA.maxDuration_h * 3600 - a.walkTime
   if (targets === 0 || budget <= 0) {
-    return `Walking alone takes ${fmtDur(a.walkTime)}. Remove a target or move checkpoints closer together.`
+    return `Walking alone takes ${fmtDur(a.walkTime)} at no more than ${PLANNING_PACE.max_kmh} km/h. Remove a target or move checkpoints closer together.`
   }
   const maxStop = Math.floor(budget / targets / 60)
   if (maxStop < 1) {
-    return `Walking takes ${fmtDur(a.walkTime)}, which leaves no time at the targets. Remove a target or shorten the route.`
+    return `Walking takes ${fmtDur(a.walkTime)} at no more than ${PLANNING_PACE.max_kmh} km/h, which leaves no time at the targets. Remove a target or shorten the route.`
   }
   return `Reduce time at each target to ${maxStop} min or less (now ${a.stopMinutes} min), or remove a target.`
 }
@@ -50,7 +50,7 @@ export function walkBackAdvice(a: AdviceInput, kind: 'distance' | 'time'): strin
   if (!back.verified) {
     return `From a point near ${where}, the search for a way back within both limits reached its calculation limit. This is not a confirmed violation, and it is not a pass. Move that checkpoint closer to the habitat to get a definite answer.`
   }
-  const path = `${fmtKm(back.maxDistance)} in ${fmtDur(back.maxTime)}`
+  const path = `${fmtKm(back.maxDistance)} in ${fmtDur(back.maxTime)} at no more than ${PLANNING_PACE.max_kmh} km/h`
   if (kind === 'distance') {
     return `From a point near ${where}, no way back is within both limits; the best found is ${path}, which is too long. Move it closer to the habitat, or move the habitat.`
   }

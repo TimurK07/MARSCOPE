@@ -28,13 +28,19 @@
 // found) nor called a proven failure (none was ruled out). The check is never
 // relaxed to save time.
 //
+// Time is counted at the planning pace: the speed model, but never faster than
+// the planning pace the one-hour limit was sized for (planningSpeedMs in
+// model.ts). Every search here uses that time, so the way back that is found,
+// reported and shown is itself within both limits at that pace; nothing is
+// rescaled from a route found with another speed.
+//
 // The same field serves every route priority of a plan, so all three are held
 // to the same answer. Costs depend on direction (a climb is slower than a
 // descent), so everything here is computed for walking towards the habitat.
 // Paths are grid paths, not straightened ones: their length is never shorter
 // than the straightened equivalent, so the check errs on the careful side.
 
-import { RETURN_LIMITS, walkingSpeedMs } from './model'
+import { planningSpeedMs, RETURN_LIMITS } from './model'
 import { cellAt, elevationAt, type LatLon, type Terrain } from './terrain'
 import { DX, DY, gradeAllowed, gradeDeg, isWalkable, MinHeap, stepLengths } from './traverse'
 
@@ -45,10 +51,13 @@ export interface ReturnLimits {
   time_s: number
 }
 
+/** Walking speed in m/s for a grade in degrees. */
+export type SpeedModel = (gradeDeg: number) => number
+
 export interface WalkBack {
   /**
-   * The return from the worst point of the route: length and duration of one
-   * and the same path back. When `feasible`, both are within the limits.
+   * The return from the worst point of the route: length and duration (at the
+   * planning pace) of one and the same path back. When `feasible`, both are within the limits.
    * When not, it is the least bad return found, and at least one is over.
    */
   maxDistance: number
@@ -97,15 +106,17 @@ class CostField {
   private readonly heap = new MinHeap()
   private readonly t: Terrain
   private readonly limits: ReturnLimits
+  private readonly speed: SpeedModel
   private readonly stepLen: number[]
   /** Fields with a cap stop once every remaining cell would cost more than the cap. */
   private readonly cap: number
   private exhausted = false
 
-  constructor(t: Terrain, home: number, w: number, limits: ReturnLimits, cap: number) {
+  constructor(t: Terrain, home: number, w: number, limits: ReturnLimits, cap: number, speed: SpeedModel) {
     this.t = t
     this.w = w
     this.limits = limits
+    this.speed = speed
     this.cap = cap
     const n = t.width * t.height
     this.dist = new Float64Array(n).fill(Infinity)
@@ -125,7 +136,7 @@ class CostField {
 
   /** Continues the search until every listed cell is settled, or cannot be. */
   settle(cells: Iterable<number>) {
-    const { t, dist, time, closed, heap, stepLen } = this
+    const { t, dist, time, closed, heap, stepLen, speed } = this
     const w = t.width
     const h = t.height
     const wanted = new Set<number>()
@@ -155,7 +166,7 @@ class CostField {
         const grade = gradeDeg(dz, d)
         if (!gradeAllowed(grade)) continue
         const nd = dist[v] + Math.hypot(d, dz)
-        const nt = time[v] + d / walkingSpeedMs(grade)
+        const nt = time[v] + d / speed(grade)
         const cand = this.cost(nd, nt)
         if (cand < this.cost(dist[u], time[u])) {
           dist[u] = nd
@@ -224,10 +235,19 @@ export class WalkBackField {
   /** For cells on return paths found by the exact search: length and time of the rest of that path. */
   private readonly hints = new Map<number, Hint>()
   private readonly labelBudget: number
+  /** How fast the way back is walked. The planning pace unless a test says otherwise. */
+  readonly speed: SpeedModel
   /** Work done so far, for benchmarks and tests. */
   readonly stats = { fields: 0, exactSearches: 0, labels: 0, unverified: 0 }
 
-  constructor(t: Terrain, habitat: LatLon, limits: ReturnLimits = RETURN_LIMITS, labelBudget = DEFAULT_LABEL_BUDGET) {
+  constructor(
+    t: Terrain,
+    habitat: LatLon,
+    limits: ReturnLimits = RETURN_LIMITS,
+    labelBudget = DEFAULT_LABEL_BUDGET,
+    speed: SpeedModel = planningSpeedMs,
+  ) {
+    this.speed = speed
     this.t = t
     this.home = cellAt(t, habitat)
     this.limits = limits
@@ -241,7 +261,7 @@ export class WalkBackField {
   }
 
   private addField(w: number, cap: number) {
-    this.fields.push(new CostField(this.t, this.home, w, this.limits, cap))
+    this.fields.push(new CostField(this.t, this.home, w, this.limits, cap, this.speed))
     this.stats.fields++
   }
 
@@ -405,7 +425,7 @@ export class WalkBackField {
         const grade = gradeDeg(dz, len)
         if (!gradeAllowed(grade)) continue
         const d = d0 + Math.hypot(len, dz)
-        const s = s0 + len / walkingSpeedMs(grade)
+        const s = s0 + len / this.speed(grade)
         if (d > D || s > T) continue
         const key = worstBound(n, d, s)
         if (key > 1 + EPS) continue
@@ -557,6 +577,12 @@ export class WalkBackField {
 }
 
 /** Return check for one route. See WalkBackField. */
-export function walkBack(t: Terrain, habitat: LatLon, route: LatLon[], limits: ReturnLimits = RETURN_LIMITS): WalkBack | null {
-  return new WalkBackField(t, habitat, limits).assess(route)
+export function walkBack(
+  t: Terrain,
+  habitat: LatLon,
+  route: LatLon[],
+  limits: ReturnLimits = RETURN_LIMITS,
+  speed: SpeedModel = planningSpeedMs,
+): WalkBack | null {
+  return new WalkBackField(t, habitat, limits, DEFAULT_LABEL_BUDGET, speed).assess(route)
 }

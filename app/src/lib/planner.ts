@@ -4,7 +4,7 @@
 
 import { fmtDur } from './format'
 import { buildChecks, missionVerdict, type Check, type Verdict } from './mission'
-import { surfaceDistanceM } from './model'
+import { backgroundDoseMsv, surfaceDistanceM } from './model'
 import { makeObjective, ROUTE_MODES, type RouteMode } from './objectives'
 import { findLeg, WalkBackField, type LegResult, type RouteLeg, type RouteSample, type WalkBack } from './router'
 import type { LatLon, Terrain } from './terrain'
@@ -39,7 +39,10 @@ export interface Plan {
   samples: RouteSample[]
   legStarts: number[]
   distance: number
+  /** Walking time by the speed model, seconds. This is what Fastest minimises. */
   walkTime: number
+  /** Walking time of the same route with the speed capped at the planning pace, seconds. */
+  planWalkTime: number
   ascent: number
   descent: number
   maxSlope: number
@@ -48,9 +51,9 @@ export interface Plan {
   /** Farthest point of the route from the habitat in a straight line, metres. For information only. */
   farthest: number
   /**
-   * Worst-case walk back to the habitat from anywhere on the route. Always the
-   * fastest safe way back over the grid, whatever the routing mode: it is a
-   * safety check, not part of the optimised route.
+   * Return to the habitat from the point of the route that decides the outcome:
+   * one way back, its length, and its duration at the planning pace. The same
+   * for every routing mode: it is a safety check, not part of the optimised route.
    */
   walkBack: WalkBack | null
   /** Null when the terrain has no subcell data. */
@@ -116,6 +119,7 @@ export function computePlan(t: Terrain, input: PlanInput, mode: RouteMode, cache
     legStarts,
     distance: dist,
     walkTime: time,
+    planWalkTime: sum((l) => l.planDuration),
     ascent: sum((l) => l.ascent),
     descent: sum((l) => l.descent),
     maxSlope: legs.reduce((a, l) => Math.max(a, l.maxSlope), 0),
@@ -158,8 +162,17 @@ export interface ModeSummary {
   feasible: boolean
   distance: number
   walkTime: number
+  /** The same route walked no faster than the planning pace. */
+  planWalkTime: number
+  /** Whole EVA with model walking time: walking plus time at the targets. */
   evaSeconds: number
+  /** Whole EVA with planning-pace walking time. The 8-hour limit is applied to this one. */
+  planEvaSeconds: number
   energyKcal: number
+  /** Background dose over the model EVA duration, mSv. A simplified estimate (see backgroundDoseMsv). */
+  doseMsv: number
+  /** The same over the planning EVA duration. A second scenario, not an upper bound. */
+  planDoseMsv: number
   ascent: number
   descent: number
   exposure: Exposure | null
@@ -172,7 +185,9 @@ export function summarise(plan: Plan | null, input: PlanInput, stopMinutes: numb
   const feasible = !plan.error
   const targets = Math.max(input.points.length - 1, 0)
   const evaSeconds = plan.walkTime + targets * stopMinutes * 60
-  const checks = feasible ? buildChecks({ evaSeconds, walkBack: plan.walkBack }) : null
+  // The mission limits are judged on the planning-pace figures: EVA duration and the way back alike.
+  const planEvaSeconds = plan.planWalkTime + targets * stopMinutes * 60
+  const checks = feasible ? buildChecks({ evaSeconds: planEvaSeconds, walkBack: plan.walkBack }) : null
   const verdict = missionVerdict(true, feasible, checks)
   const failed = checks?.filter((c) => !c.ok) ?? []
   return {
@@ -181,8 +196,12 @@ export function summarise(plan: Plan | null, input: PlanInput, stopMinutes: numb
     feasible,
     distance: plan.distance,
     walkTime: plan.walkTime,
+    planWalkTime: plan.planWalkTime,
     evaSeconds,
+    planEvaSeconds,
     energyKcal: (plan.energyPerKg * input.massKg + plan.energyFixed) / 4184,
+    doseMsv: backgroundDoseMsv(evaSeconds),
+    planDoseMsv: backgroundDoseMsv(planEvaSeconds),
     ascent: plan.ascent,
     descent: plan.descent,
     exposure: plan.exposure,

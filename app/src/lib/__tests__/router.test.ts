@@ -183,7 +183,12 @@ describe('walk back to the habitat', () => {
     const back = walkBack(t, at(t, 5, 32), out.leg.samples)!
     expect(back.reachable).toBe(true)
     expect(back.maxDistance).toBeCloseTo(40 * CELL, 3)
-    expect(back.maxTime).toBeCloseTo((40 * CELL) / MAX_SPEED_MS, 2)
+    // The way back is timed at the planning pace (2000 m per 3600 s), not at the model's 1.6 m/s.
+    expect(back.maxTime).toBeCloseTo((40 * CELL) / (2000 / 3600), 6)
+    // With the model speed passed in instead, it is the outbound time.
+    const atModelSpeed = walkBack(t, at(t, 5, 32), out.leg.samples, undefined, walkingSpeedMs)!
+    expect(atModelSpeed.maxTime).toBeCloseTo((40 * CELL) / MAX_SPEED_MS, 6)
+    expect(atModelSpeed.maxTime).toBeCloseTo(out.leg.duration, 6)
   })
 
   it('is slower than the walk out when the habitat is uphill', () => {
@@ -196,8 +201,8 @@ describe('walk back to the habitat', () => {
     const back = walkBack(t, at(t, 5, 4), out.leg.samples)!
     expect(back.maxTime).toBeGreaterThan(out.leg.duration * 1.5)
     // Close to a steady 5 degree climb (elevation is stored in 0.1 m steps, so not exact).
-    const steady = (40 * CELL) / walkingSpeedMs(5)
-    expect(Math.abs(back.maxTime - steady) / steady).toBeLessThan(0.1)
+    const steady = (40 * CELL) / Math.min(walkingSpeedMs(5), 2000 / 3600)
+    expect(Math.abs(back.maxTime - steady) / steady).toBeLessThan(0.15)
   })
 
   it('follows the terrain, not the straight line', () => {

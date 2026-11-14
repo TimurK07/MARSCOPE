@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildChecks, missionVerdict } from '../mission'
-import { RETURN_LIMITS } from '../model'
+import { EVA, RETURN_LIMITS } from '../model'
 import type { WalkBack } from '../returnCheck'
 
 const here = { lat: -4.82, lon: 137.39 }
@@ -156,6 +156,59 @@ describe('return figures at the limits', () => {
     expect(dist(1310).value).toBe('1.31 km')
     expect(time(27.01 * 60).value).toBe('28 min')
     expect(time(27 * 60).value).toBe('27 min')
+  })
+})
+
+describe('the 8-hour limit, on the EVA duration at the planning pace', () => {
+  const LIMIT = EVA.maxDuration_h * 3600
+  const fine = back(500, 600)
+  const duration = (evaSeconds: number) => buildChecks({ evaSeconds, walkBack: fine })[0]
+  const verdict = (evaSeconds: number) => missionVerdict(true, true, buildChecks({ evaSeconds, walkBack: fine }))
+
+  it('is 8 hours and says which duration it is applied to', () => {
+    expect(LIMIT).toBe(28_800)
+    expect(duration(3600).id).toBe('duration')
+    expect(duration(3600).label).toBe('EVA duration at ≤ 2 km/h')
+    expect(duration(3600).limit).toBe('≤ 8 h')
+  })
+
+  it('passes at exactly 8 hours', () => {
+    expect(duration(LIMIT).ok).toBe(true)
+    expect(duration(LIMIT).state).toBe('ok')
+    expect(duration(LIMIT).ratio).toBe(1)
+    expect(verdict(LIMIT)).toBe('go')
+  })
+
+  it('passes just below and fails just above', () => {
+    expect(verdict(LIMIT - 1e-6)).toBe('go')
+    expect(verdict(LIMIT - 1)).toBe('go')
+    expect(duration(LIMIT + 1e-6).ok).toBe(false)
+    expect(duration(LIMIT + 1e-6).state).toBe('fail')
+    expect(verdict(LIMIT + 1e-6)).toBe('nogo')
+    expect(verdict(LIMIT + 1)).toBe('nogo')
+  })
+
+  it('does not round a failing duration down to the limit, or overstate the room left', () => {
+    // 20 seconds over must not read "8 h 00 min".
+    expect(duration(LIMIT + 20).value).toBe('8 h 01 min')
+    expect(duration(LIMIT + 20).margin).toBe('over by 1 min')
+    expect(duration(LIMIT - 20).value).toBe('8 h 00 min')
+    expect(duration(LIMIT - 20).margin).toBe('less than 1 min to spare')
+    expect(duration(LIMIT).margin).toBe('less than 1 min to spare')
+    expect(duration(LIMIT - 90).margin).toBe('1 min to spare')
+    expect(duration(2 * 3600).margin).toBe('6 h 00 min to spare')
+    expect(duration(9 * 3600).margin).toBe('over by 1 h 00 min')
+  })
+
+  it('is a confirmed NO-GO over the limit even when the return is unverified, and UNVERIFIED under it', () => {
+    const open = back(2100, 3000, true, { feasible: false, verified: false })
+    expect(missionVerdict(true, true, buildChecks({ evaSeconds: LIMIT + 60, walkBack: open }))).toBe('nogo')
+    expect(missionVerdict(true, true, buildChecks({ evaSeconds: LIMIT - 60, walkBack: open }))).toBe('unverified')
+  })
+
+  it('never makes a plan without a route anything but NO ROUTE', () => {
+    expect(missionVerdict(true, false, null)).toBe('noroute')
+    expect(missionVerdict(true, false, buildChecks({ evaSeconds: 60, walkBack: fine }))).toBe('noroute')
   })
 })
 

@@ -34,6 +34,8 @@ const SOL_4677 = { lat: -4.80871233, lon: 137.3816902 } // 1.11 km: the case the
 const SOUTH = { lat: -4.8442, lon: 137.372 }
 // 1.6 km east of the habitat in a straight line, across broken ground.
 const EAST = { lat: -4.8235, lon: 137.4160 }
+// On steep but walkable ground (cell slope 19.9 degrees), 600 m from the habitat.
+const STEEP_TARGET = { lat: -4.815874, lon: 137.3894873 }
 const MESA = { lat: -4.7924951, lon: 137.3979639 } // a walkable cell on a mesa cut off on all sides
 
 const MISSIONS: Record<string, PlanInput> = {
@@ -42,6 +44,7 @@ const MISSIONS: Record<string, PlanInput> = {
   audit_case: { points: [...EXAMPLE, SOL_4677], roundTrip: true, massKg: MASS },
   south: { points: [...EXAMPLE, SOUTH], roundTrip: true, massKg: MASS },
   east: { points: [...EXAMPLE, EAST], roundTrip: true, massKg: MASS },
+  steep: { points: [...EXAMPLE, STEEP_TARGET], roundTrip: true, massKg: MASS },
   mesa: { points: [...EXAMPLE, MESA], roundTrip: true, massKg: MASS },
 }
 
@@ -137,7 +140,10 @@ describe('missions on the real grid', () => {
   // ---- an independent reading of the terrain, written here: plain searches from the habitat
   const DX8 = [1, 1, 0, -1, -1, -1, 0, 1]
   const DY8 = [0, 1, 1, 1, 0, -1, -1, -1]
-  const speed = (g: number) => (g <= -20 ? 0.05 : g <= -10 ? 0.095 * g + 1.95 : g <= 0 ? 0.06 * g + 1.6 : g <= 6 ? -0.2 * g + 1.6 : g <= 15 ? -0.039 * g + 0.634 : 0.05)
+  /** The speed model, written out here. */
+  const model = (g: number) => (g <= -20 ? 0.05 : g <= -10 ? 0.095 * g + 1.95 : g <= 0 ? 0.06 * g + 1.6 : g <= 6 ? -0.2 * g + 1.6 : g <= 15 ? -0.039 * g + 0.634 : 0.05)
+  /** The way back is timed at the planning pace: the model, never faster than 2000 m in 3600 s. */
+  const speed = (g: number) => Math.min(model(g), 2000 / 3600)
   /** The step u -> v if it may be walked: its length and time. */
   const stepOf = (u: number, k: number): { v: number; d: number; s: number } | null => {
     const x = u % W
@@ -255,6 +261,27 @@ describe('missions on the real grid', () => {
         }
         expect(cutOff).toBe(false)
         const v = verifyRoute(p)
+        // Both walking times belong to the same route: re-add them here from the route's own samples.
+        let modelTime = 0
+        let planTime = 0
+        let flatTotal = 0
+        for (let i = 1; i < p.samples.length; i++) {
+          const a = p.samples[i - 1]
+          const b = p.samples[i]
+          const along = b.dist - a.dist
+          if (along <= 0) continue
+          const dz = b.elevation - a.elevation
+          const flat = Math.sqrt(Math.max(along * along - dz * dz, 0))
+          const g = (Math.atan2(dz, flat) * 180) / Math.PI
+          flatTotal += flat
+          modelTime += flat / model(g)
+          planTime += flat / speed(g)
+        }
+        expect(Math.abs(modelTime - p.walkTime) / p.walkTime).toBeLessThan(1e-6)
+        expect(Math.abs(planTime - p.planWalkTime) / p.planWalkTime).toBeLessThan(1e-6)
+        expect(p.planWalkTime).toBeGreaterThanOrEqual(p.walkTime)
+        // Nothing on a route is walked faster than the planning pace in that scenario.
+        expect(p.planWalkTime).toBeGreaterThanOrEqual(flatTotal / (2000 / 3600) - 1e-6)
         const cells = [...new Set(p.samples.map((q) => cellAt(t, q)))]
         // What the terrain says about the way back, without the planner's return check:
         //   no path at all can be within both limits from a cell whose shortest way back is too long or fastest too slow.
@@ -274,7 +301,16 @@ describe('missions on the real grid', () => {
           if (!sums || sums.d > D || sums.s > T) provenPass = false
           else if (Math.max(sums.d / D, sums.s / T) > Math.max(worst.d / D, worst.s / T)) worst = sums
         }
-        const independent = provenFail ? 'nogo' : provenPass && s.evaSeconds <= 8 * 3600 ? 'go' : 'undetermined'
+        // The 8-hour limit is judged on the planning duration: the planning walking time re-added above, plus 20 min at each target.
+        const planEva = planTime + (input.points.length - 1) * 20 * 60
+        expect(Math.abs(planEva - s.planEvaSeconds)).toBeLessThan(1e-3)
+        const overTime = planEva > 8 * 3600
+        // Background dose for each duration: 0.67 mSv per day times the time, re-derived here.
+        const modelEva = modelTime + (input.points.length - 1) * 20 * 60
+        expect(Math.abs(s.doseMsv - (0.67 * modelEva) / 86_400)).toBeLessThan(1e-7)
+        expect(Math.abs(s.planDoseMsv - (0.67 * planEva) / 86_400)).toBeLessThan(1e-7)
+        const independent = provenFail || overTime ? 'nogo' : provenPass ? 'go' : 'undetermined'
+        expect(s.checks!.find((c) => c.id === 'duration')!.ok).toBe(!overTime)
         expect(independent, `${name}/${m.id}: the independent reading must settle the verdict`).not.toBe('undetermined')
         expect(s.verdict, `${name}/${m.id}`).toBe(independent)
         const back = p.walkBack!
@@ -284,8 +320,12 @@ describe('missions on the real grid', () => {
           failed: s.checks!.filter((c) => !c.ok).map((c) => `${c.id} ${c.value}`),
           distance_m: +p.distance.toFixed(0),
           walk_min: +(p.walkTime / 60).toFixed(1),
+          walk_min_planning: +(p.planWalkTime / 60).toFixed(1),
           eva_min: +(s.evaSeconds / 60).toFixed(0),
+          eva_min_planning: +(s.planEvaSeconds / 60).toFixed(0),
           energy_kcal: +s.energyKcal.toFixed(0),
+          dose_mSv_model: +s.doseMsv.toFixed(4),
+          dose_mSv_planning: +s.planDoseMsv.toFixed(4),
           climb_m: +p.ascent.toFixed(0),
           descent_m: +p.descent.toFixed(0),
           hidden_load: +p.exposure!.load.toFixed(2),
@@ -314,6 +354,40 @@ describe('missions on the real grid', () => {
     expect(verdictOf('mesa')).toBe('noroute')
   })
 
+  it('example mission with long stops: under 8 h by the model, over at the planning pace, NO-GO in every mode', () => {
+    const input = MISSIONS.example
+    const plans = computeAllPlans(t, input)
+    const LIMIT = 8 * 3600
+    const stop = 215 // minutes at each of the two targets
+    const rows: Record<string, unknown> = {}
+    for (const m of ROUTE_MODES) {
+      const p = plans[m.id]!
+      const s = summarise(p, input, stop)!
+      // Both walking times re-added here from the route's own samples.
+      let modelTime = 0
+      let planTime = 0
+      for (let i = 1; i < p.samples.length; i++) {
+        const along = p.samples[i].dist - p.samples[i - 1].dist
+        if (along <= 0) continue
+        const dz = p.samples[i].elevation - p.samples[i - 1].elevation
+        const flat = Math.sqrt(Math.max(along * along - dz * dz, 0))
+        const g = (Math.atan2(dz, flat) * 180) / Math.PI
+        modelTime += flat / model(g)
+        planTime += flat / speed(g)
+      }
+      const modelEva = modelTime + 2 * stop * 60
+      const planEva = planTime + 2 * stop * 60
+      expect(modelEva).toBeLessThan(LIMIT)
+      expect(planEva).toBeGreaterThan(LIMIT)
+      expect(s.verdict).toBe('nogo')
+      expect(s.checks!.filter((c) => !c.ok).map((c) => c.id)).toEqual(['duration'])
+      rows[m.id] = { model_eva_min: +(modelEva / 60).toFixed(1), planning_eva_min: +(planEva / 60).toFixed(1), verdict: s.verdict }
+      // With the default 20-minute stops the same routes are well inside the limit.
+      expect(summarise(p, input, 20)!.verdict).toBe('go')
+    }
+    report.example_with_215_min_stops = rows
+  })
+
   it('southern mission: the far target has no way back within the limits, by two plain searches', () => {
     const c = cellAt(t, SOUTH)
     report.south_far_target = { shortest_back_m: +shortest[c].toFixed(2), fastest_back_min: +(fastest[c] / 60).toFixed(2), limits: `${D} m, ${T / 60} min` }
@@ -335,9 +409,13 @@ describe('missions on the real grid', () => {
     // A cross-check of the return fields themselves, at the mission targets.
     for (const p of [EXAMPLE[1], EXAMPLE[2], SOL_4845, SOL_4677, SOUTH, EAST]) {
       const c = cellAt(t, p)
-      const leg = findLeg(t, p, EXAMPLE[0], { smooth: false })
+      // The planner's own A* with a planning-pace time cost, against the plain search above.
+      const leg = findLeg(t, p, EXAMPLE[0], {
+        smooth: false,
+        objective: { mode: 'fastest', unit: 's', pieceCost: (d, g) => d / speed(g), minPerMetre: 1 / 1.6 },
+      })
       expect(leg.ok).toBe(true)
-      if (leg.ok) expect(Math.abs(leg.leg.grid.duration - fastest[c])).toBeLessThan(1e-6)
+      if (leg.ok) expect(Math.abs(leg.leg.grid.cost - fastest[c])).toBeLessThan(1e-6)
       const short = findLeg(t, p, EXAMPLE[0], {
         smooth: false,
         objective: { mode: 'fastest', unit: 'm', pieceCost: (d, g) => d / Math.cos((g * Math.PI) / 180), minPerMetre: 1 },

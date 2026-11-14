@@ -3,7 +3,7 @@ import { adviceFor } from '../lib/advice'
 import { buildChecks, type Verdict } from '../lib/mission'
 import { CAUTION_WEIGHT, ROUTE_MODES, type RouteMode } from '../lib/objectives'
 import type { ModeSummary } from '../lib/planner'
-import { MAX_SLOPE_DEG, RADIATION, RETURN_LIMITS } from '../lib/model'
+import { EVA, MAX_SLOPE_DEG, PLANNING_PACE, RADIATION, RETURN_LIMITS } from '../lib/model'
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
 import { Datum, Icon, Section, Segmented } from './ui'
 
@@ -31,7 +31,18 @@ function ModeComparison(props: {
   const any = cols.some((c) => c.data)
   const rows: { label: string; hint?: string; value: (d: ModeSummary) => string; num?: (d: ModeSummary) => number }[] = [
     { label: 'Distance', value: (d) => fmtKm(d.distance), num: (d) => d.distance },
-    { label: 'Walking time', value: (d) => fmtDur(d.walkTime), num: (d) => d.walkTime },
+    {
+      label: 'Walking time, model',
+      hint: 'By the walking-speed model (Marquez 2007, as in SEXTANT). This is what Fastest minimises.',
+      value: (d) => fmtDur(d.walkTime),
+      num: (d) => d.walkTime,
+    },
+    {
+      label: `at ≤ ${PLANNING_PACE.max_kmh} km/h`,
+      hint: `The same route with the speed capped at the planning pace of ${PLANNING_PACE.max_kmh} km/h. A second scenario, not a bound or a confidence interval.`,
+      value: (d) => fmtDur(d.planWalkTime),
+      num: (d) => d.planWalkTime,
+    },
     { label: 'Walking energy', value: (d) => `${Math.round(d.energyKcal)} kcal`, num: (d) => d.energyKcal },
     { label: 'Climb', value: (d) => `+${Math.round(d.ascent)} m`, num: (d) => d.ascent },
     {
@@ -185,7 +196,7 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
           <dd>{ready ? fmtKm(plan.distance) : '—'}</dd>
         </div>
         <div>
-          <dt>EVA duration</dt>
+          <dt title="Walking time by the speed model plus time at the targets. The time at the planning pace is under Route telemetry.">EVA duration · model</dt>
           <dd>{ready ? fmtDur(s.evaSeconds) : '—'}</dd>
         </div>
         <div>
@@ -229,7 +240,7 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
   }, [verdict])
 
   const adviceInput = ready
-    ? { points, walkTime: plan.walkTime, stopMinutes: s.stopMinutes, walkBack: plan.walkBack }
+    ? { points, walkTime: plan.planWalkTime, stopMinutes: s.stopMinutes, walkBack: plan.walkBack }
     : null
   // With no route yet, show the limits the plan will be held to.
   const idleChecks = buildChecks({ evaSeconds: 0, walkBack: null }).map((c) => ({ ...c, value: '—', ok: true, ratio: 0, margin: '' }))
@@ -413,12 +424,16 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           })}
         </ul>
         <p className="footnote">
-          The return limits ({RETURN_LIMITS.distance_m / 1000} km and {RETURN_LIMITS.time_s / 60} min) are MARSCOPE planning
-          assumptions that can be changed in the model, not NASA requirements for Mars. They are adapted from NASA
-          EVA-EXP-0075, a summary of the Artemis lunar EVA concept (walking excursions within a 2 km radius, about 2 km/h,
-          one hour of secondary oxygen), which is also the source of the 8-hour duration. A plan passes only if, from
-          every point of the route, one and the same way back meets both limits; the two figures above describe that
-          path from the worst point. Ways back follow the terrain grid towards the habitat, so a climb home counts as
+          All three limits are MARSCOPE planning assumptions that can be changed in the model. None is an official
+          safety standard for EVAs on Mars. They are informed by NASA EVA-EXP-0075, a summary of the Artemis lunar EVA
+          concept: a suit that supports EVAs of up to 8 hours, walking excursions within a 2 km radius at about 2 km/h,
+          and one hour of secondary oxygen. The {EVA.maxDuration_h}-hour limit is applied to the EVA duration at the
+          planning pace (walking no faster than {PLANNING_PACE.max_kmh} km/h, plus the time at the targets); the duration by
+          the speed model alone is shown above and under Route telemetry. The return limits are{' '}
+          {RETURN_LIMITS.distance_m / 1000} km and {RETURN_LIMITS.time_s / 60} min. A plan passes only if, from
+          every point of the route, one and the same way back meets both limits, with its time counted at no more than{' '}
+          {PLANNING_PACE.max_kmh} km/h; the two figures above describe that path from the worst point. Passing this check
+          is a planning result under these assumptions, not a guarantee of a safe return on Mars. Ways back follow the terrain grid towards the habitat, so a climb home counts as
           slower than the walk out, and they are not straightened, which errs on the careful side.
         </p>
       </Section>
@@ -426,8 +441,11 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
       <Section title="Route telemetry" defaultOpen={false}>
         {ready ? (
           <dl className="data">
-            <Datum label="Walking time">{fmtDur(plan.walkTime)}</Datum>
+            <Datum label="Walking time, model">{fmtDur(plan.walkTime)}</Datum>
+            <Datum label={`Walking time at ≤ ${PLANNING_PACE.max_kmh} km/h`}>{fmtDur(plan.planWalkTime)}</Datum>
             <Datum label="Time at targets">{fmtDur(targets * s.stopMinutes * 60)}</Datum>
+            <Datum label="EVA duration, model">{fmtDur(s.evaSeconds)}</Datum>
+            <Datum label={`EVA duration at ≤ ${PLANNING_PACE.max_kmh} km/h`}>{fmtDur(plan.planWalkTime + targets * s.stopMinutes * 60)}</Datum>
             <Datum label="Mean walking speed">{(plan.distance / plan.walkTime).toFixed(2)} m/s</Datum>
             <Datum label="Steepest terrain on route">
               {plan.maxSlope.toFixed(1)}° of {MAX_SLOPE_DEG}°
@@ -449,6 +467,14 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           <p className="muted">Available once a route is planned.</p>
         )}
         <p className="footnote">
+          Two walking times are given for the same route. The model time uses the walking-speed model (Marquez 2007, as in
+          SEXTANT), which rests on twelve Apollo 14 speeds on slopes between about −8° and +6.5° and walks 1.6 m/s on the
+          level. The second time caps that speed at {PLANNING_PACE.max_kmh} km/h, the pace NASA EVA-EXP-0075 assumes for lunar
+          walking excursions, adopted here as a planning assumption. Both inherit the model's limits and neither is a
+          validated walking time for Mars; they are two scenarios, not a range with a known confidence. EVA duration adds
+          the time at the targets to the walking time.
+        </p>
+        <p className="footnote">
           The route is straightened only where the straight line stays on walkable ground, is no slower, and crosses no
           more hidden steep ground. Hidden steep ground counts 1 m DEM pixels over {MAX_SLOPE_DEG}° inside a 4 m cell; it
           is an indicator of roughness, not a probability, and rocks or ledges smaller than the DEM resolves are not
@@ -460,13 +486,30 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
         </p>
       </Section>
 
-      <Section title="Radiation exposure" defaultOpen={false} aside={ready ? `${s.doseMsv.toFixed(3)} mSv` : undefined}>
+      <Section
+        title="Radiation exposure"
+        defaultOpen={false}
+        aside={ready ? `${s.doseMsv.toFixed(3)} / ${s.planDoseMsv.toFixed(3)} mSv` : undefined}
+      >
         <dl className="data">
-          <Datum label="Dose for this EVA">{ready ? `${s.doseMsv.toFixed(3)} mSv` : '—'}</Datum>
+          <Datum label="EVA duration, model">{ready ? fmtDur(s.evaSeconds) : '—'}</Datum>
+          <Datum label="Background dose, model">{ready ? `${s.doseMsv.toFixed(3)} mSv` : '—'}</Datum>
+          <Datum label={`EVA duration at ≤ ${PLANNING_PACE.max_kmh} km/h`}>{ready ? fmtDur(s.planEvaSeconds) : '—'}</Datum>
+          <Datum label={`Background dose at ≤ ${PLANNING_PACE.max_kmh} km/h`}>{ready ? `${s.planDoseMsv.toFixed(3)} mSv` : '—'}</Datum>
           <Datum label="Surface rate (RAD)">{RADIATION.doseEquivalent_mSv_per_day} mSv/day</Datum>
-          <Datum label="Share of career limit">{ready ? `${((s.doseMsv / RADIATION.careerLimit_mSv) * 100).toFixed(3)} %` : '—'}</Datum>
-          <Datum label="Career limit">{RADIATION.careerLimit_mSv} mSv</Datum>
+          <Datum label="Career limit, for scale">{RADIATION.careerLimit_mSv} mSv</Datum>
+          <Datum label="Share of career limit, model">
+            {ready ? `${((s.doseMsv / RADIATION.careerLimit_mSv) * 100).toFixed(3)} %` : '—'}
+          </Datum>
+          <Datum label={`Share at ≤ ${PLANNING_PACE.max_kmh} km/h`}>
+            {ready ? `${((s.planDoseMsv / RADIATION.careerLimit_mSv) * 100).toFixed(3)} %` : '—'}
+          </Datum>
         </dl>
+        <p className="footnote">
+          Two figures, one for each EVA duration: the same surface rate multiplied by the time outside. They are
+          simplified estimates of background exposure, not validated astronaut doses, and the planning figure is a second
+          scenario, not an upper bound: a longer EVA or a solar event gives more. Radiation does not enter GO / NO-GO.
+        </p>
         <p className="footnote">{RADIATION.note}</p>
       </Section>
     </>

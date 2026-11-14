@@ -24,8 +24,15 @@ export const MAX_SPEED_MS = 1.6
  * Walking speed of a suited astronaut as a function of the grade along the
  * direction of travel (degrees, positive = uphill).
  *
- * Marquez (2008), derived from Apollo traverse data, as implemented in the
- * SEXTANT traverse planner used by NASA's BASALT field programme.
+ * Marquez (2007), as implemented in the SEXTANT traverse planner used by
+ * NASA's BASALT field programme. What it rests on, from the thesis itself:
+ * twelve average speeds from the second Apollo 14 EVA (Waligora & Horrigan
+ * 1975), on slopes between about -8 and +6.5 degrees, in lunar gravity and
+ * Apollo suits. The profile was drawn to resemble those points and is defined
+ * from -15 to +15 degrees. Beyond that range SEXTANT holds the speed at
+ * 0.05 m/s on purpose, so that such ground is heavily penalised: that value is
+ * a placeholder outside the model, not a measured speed. Nothing here is
+ * specific to Mars.
  */
 export function walkingSpeedMs(gradeDeg: number): number {
   const s = gradeDeg
@@ -35,6 +42,36 @@ export function walkingSpeedMs(gradeDeg: number): number {
   if (s <= 6) return -0.2 * s + 1.6
   if (s <= 15) return -0.039 * s + 0.634
   return 0.05
+}
+
+/**
+ * Planning pace. A MARSCOPE planning assumption, kept here so it can be changed.
+ *
+ * NASA EVA-EXP-0075, a 2020 summary of the Artemis lunar-surface EVA concept,
+ * sizes walking excursions assuming "~2 km/hr walking pace on relatively level
+ * regolith". We adopt that lunar planning reference as an upper speed for
+ * conservative planning. It is not a measured or validated walking speed for
+ * Mars, and capping the model with it does not make the model valid.
+ */
+export const PLANNING_PACE = {
+  max_kmh: 2,
+  /** The same in metres per second: 2000 m in 3600 s. */
+  max_ms: 2000 / 3600,
+}
+
+/**
+ * Walking speed for conservative planning: the model's speed for the grade,
+ * but never above the planning pace.
+ *
+ *   v_planning(grade) = min(v_model(grade), 2000 / 3600)
+ *
+ * The model is untouched: where it is already slower than the planning pace
+ * (uphill steeper than about 5.2 degrees, downhill steeper than about 14.7),
+ * the two are the same. Used for the second walking-time estimate and for the
+ * return-to-habitat time limit. Routes are still optimised with the model.
+ */
+export function planningSpeedMs(gradeDeg: number): number {
+  return Math.min(walkingSpeedMs(gradeDeg), PLANNING_PACE.max_ms)
 }
 
 /**
@@ -57,9 +94,15 @@ export function segmentEnergy(distM: number, gradeDeg: number, speedMs: number):
 }
 
 /**
- * Longest EVA. NASA EVA-EXP-0075, a 2020 summary of the Artemis lunar-surface
- * EVA concept of operations, lists as a suit capability: "Supports EVAs of up
- * to 8 hours in duration (6±2 hours)". We use it as a planning limit for Mars.
+ * Longest EVA. A MARSCOPE planning assumption, kept here so it can be changed.
+ * It is not an official safety standard for EVAs on Mars.
+ *
+ * Informed by NASA EVA-EXP-0075, a 2020 summary of the Artemis lunar-surface EVA
+ * concept of operations, which lists as a capability of the lunar suit:
+ * "Supports EVAs of up to 8 hours in duration (6±2 hours)".
+ *
+ * The limit is applied to the EVA duration at the planning pace: walking time
+ * with the speed capped at PLANNING_PACE, plus the time spent at the targets.
  */
 export const EVA = {
   maxDuration_h: 8,
@@ -77,7 +120,8 @@ export const EVA = {
  * terrain"), assumes about 2 km/h on fairly level regolith, and notes that
  * secondary oxygen on the suit provides an additional hour. We apply 2 km to
  * the length of the way back over the terrain, which is never shorter than
- * the straight line, and one hour to its duration.
+ * the straight line, and one hour to its duration at the planning pace
+ * (planningSpeedMs), the pace the hour was sized for.
  */
 export const RETURN_LIMITS = {
   /** Longest acceptable way back, metres. */
@@ -98,6 +142,20 @@ export const RADIATION = {
     'Background galactic cosmic rays only, at the average rate Curiosity RAD measured in Gale crater. ' +
     'Solar particle events add to this: on 20 May 2024 RAD recorded 8,100 µGy from a single storm. ' +
     'Do not start an EVA during a solar storm warning.',
+}
+
+/**
+ * Background dose equivalent accumulated over a duration, in mSv: the surface
+ * rate above times the time, and nothing else.
+ *
+ *   dose = rate [mSv/day] * seconds / 86400
+ *
+ * A simplified estimate of background exposure, not a validated astronaut
+ * dose: one average rate from one period of the solar cycle, no solar particle
+ * events, no shielding by suit or body, no variation with place or time.
+ */
+export function backgroundDoseMsv(seconds: number): number {
+  return (RADIATION.doseEquivalent_mSv_per_day * seconds) / 86400
 }
 
 export interface SlopeClass {
@@ -136,12 +194,16 @@ export function surfaceDistanceM(a: LatLon, b: LatLon): number {
 
 export const SOURCES = [
   {
-    label: 'NASA EVA-EXP-0075: Exploration EVA System Concept of Operations (slope and duration limits, walking range)',
+    label: 'NASA EVA-EXP-0075: Artemis lunar EVA concept of operations summary (20° slope, 8 h EVA, 2 km range, 2 km/h pace)',
     url: 'https://www.nasa.gov/wp-content/uploads/2020/01/topic_1-_eva_lunar_surface_concept_of_operations.pdf',
   },
   {
-    label: 'SEXTANT traverse planner (Marquez 2008 walking speed; Santee et al. 2001 metabolic cost)',
+    label: 'SEXTANT traverse planner (Marquez 2007 walking speed; Santee et al. 2001 metabolic cost)',
     url: 'https://github.com/norheim/pextant/blob/master/pextant/explorers.py',
+  },
+  {
+    label: 'Marquez (2007), MIT PhD thesis: the walking-speed profile and the Apollo 14 data behind it (pp. 72–74)',
+    url: 'https://dspace.mit.edu/handle/1721.1/38526',
   },
   {
     label: 'Curiosity RAD surface radiation (Hassler et al. 2014), SwRI release',

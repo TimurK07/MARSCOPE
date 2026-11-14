@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { RADIATION } from '../lib/model'
 import type { RouteMode } from '../lib/objectives'
 import { ROUTE_MODES } from '../lib/objectives'
 import { summarise, type ModeSummary, type Plan, type PlanInput } from '../lib/planner'
@@ -97,7 +96,10 @@ export function usePlan(terrain: Terrain | null) {
 
   const selected = comparison[mode]
   const evaSeconds = selected?.evaSeconds ?? 0
-  const doseMsv = (RADIATION.doseEquivalent_mSv_per_day * evaSeconds) / 86400
+  const planEvaSeconds = selected?.planEvaSeconds ?? 0
+  // Background dose for each of the two EVA durations, by the same rate and formula.
+  const doseMsv = selected?.doseMsv ?? 0
+  const planDoseMsv = selected?.planDoseMsv ?? 0
   const energyKcal = plan ? (plan.energyPerKg * massKg + plan.energyFixed) / 4184 : 0
   // Mission-level checks apply only to a feasible route, and are the same for every priority.
   const checks = selected?.checks ?? null
@@ -126,7 +128,10 @@ export function usePlan(terrain: Terrain | null) {
     /** Verdict of the selected priority. */
     verdict,
     evaSeconds,
+    /** EVA duration at the planning pace: the one the 8-hour limit is judged on. */
+    planEvaSeconds,
     doseMsv,
+    planDoseMsv,
     energyKcal,
   }
 }
