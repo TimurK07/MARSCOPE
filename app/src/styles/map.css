@@ -86,6 +86,132 @@
   stroke-linejoin: round;
   fill: none;
 }
+/* The return is dashed as well as orange: it stays readable where it shares ground with the way out, and without colour. */
+.route-line.route-return {
+  stroke: var(--route-return);
+  stroke-dasharray: 9 5;
+  stroke-linecap: butt;
+}
+
+/* Marks at places the planner established. A ring, so the route and the ground under it stay visible. */
+.mk-note i {
+  /* Wider than a checkpoint pin, so it frames one when the two coincide. */
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2.5px solid var(--nogo);
+  background: rgb(229 80 79 / 0.14);
+  box-shadow: 0 0 0 1.5px #05181c, 0 1px 6px rgb(0 0 0 / 0.5);
+}
+.mk-note-return-unverified i {
+  border-color: var(--warn);
+  border-style: dashed;
+  background: rgb(224 178 70 / 0.14);
+}
+.mk-note-unreachable i {
+  width: 42px;
+  height: 42px;
+  border-style: dashed;
+  background: transparent;
+}
+.note-tip {
+  max-width: 260px;
+  white-space: normal;
+}
+
+/* Over the map: why a plan does not pass, and on small screens the route key */
+.route-overlay {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 450;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  max-width: min(440px, calc(100% - 24px));
+  pointer-events: none;
+}
+.route-alert {
+  display: grid;
+  gap: 1px;
+  padding: 6px 10px 7px;
+  background: rgb(14 17 21 / 0.92);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--nogo);
+  border-radius: var(--r-md);
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+.route-alert b {
+  font: 700 var(--fs-xs) var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--nogo);
+}
+.route-alert.tone-unverified {
+  border-left-color: var(--warn);
+}
+.route-alert.tone-unverified b {
+  color: var(--warn);
+}
+.route-alert.tone-noroute {
+  border-left-color: var(--noroute);
+}
+.route-alert.tone-noroute b {
+  color: var(--noroute);
+}
+.route-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 5px 9px;
+  background: rgb(14 17 21 / 0.88);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  font-size: var(--fs-xs);
+  color: var(--text-2);
+}
+.route-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.route-legend i,
+.status-key i[class^='key-'] {
+  flex: none;
+}
+.route-legend i {
+  width: 18px;
+  height: 0;
+}
+
+/* keys shared by the status bar and the compact legend */
+.key-outbound {
+  border-top: 3px solid var(--route);
+}
+.key-return {
+  border-top: 3px dashed var(--route-return);
+}
+.route-legend .key-return-limit,
+.route-legend .key-return-unverified,
+.route-legend .key-unreachable,
+.status-key .key-return-limit,
+.status-key .key-return-unverified,
+.status-key .key-unreachable {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid var(--nogo);
+}
+.route-legend .key-return-unverified,
+.status-key .key-return-unverified {
+  border-color: var(--warn);
+  border-style: dashed;
+}
+.route-legend .key-unreachable,
+.status-key .key-unreachable {
+  border-style: dashed;
+}
 .profile-cursor {
   stroke: #05181c;
   stroke-width: 2;

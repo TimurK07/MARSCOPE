@@ -152,6 +152,19 @@
 .gl-mission.tone-nogo i::after {
   background: var(--nogo);
 }
+.gl-mission.tone-unverified i {
+  border-color: var(--warn);
+}
+.gl-mission.tone-unverified i::after {
+  background: var(--warn);
+}
+.gl-mission.tone-noroute i {
+  border-color: var(--noroute);
+  border-style: dashed;
+}
+.gl-mission.tone-noroute i::after {
+  background: var(--noroute);
+}
 .gl-mission span {
   display: grid;
   padding: 3px 8px 4px;
@@ -268,6 +281,12 @@
 .hud-mission.tone-nogo {
   border-top-color: var(--nogo);
 }
+.hud-mission.tone-unverified {
+  border-top-color: var(--warn);
+}
+.hud-mission.tone-noroute {
+  border-top: 2px dashed var(--noroute);
+}
 .hud-mission strong {
   display: block;
   margin-top: 2px;
@@ -280,6 +299,12 @@
 }
 .hud-mission.tone-nogo strong {
   color: var(--nogo);
+}
+.hud-mission.tone-unverified strong {
+  color: var(--warn);
+}
+.hud-mission.tone-noroute strong {
+  color: var(--noroute);
 }
 .hud-mission p {
   margin: 4px 0 12px;

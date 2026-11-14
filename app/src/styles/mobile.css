@@ -78,9 +78,11 @@
 .sheet-verdict.v-go {
   color: var(--go);
 }
-.sheet-verdict.v-nogo,
-.sheet-verdict.v-noroute {
+.sheet-verdict.v-nogo {
   color: var(--nogo);
+}
+.sheet-verdict.v-noroute {
+  color: var(--noroute);
 }
 .sheet-summary span {
   font-family: var(--mono);

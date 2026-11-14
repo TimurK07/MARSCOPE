@@ -31,14 +31,26 @@
 .m-status-go strong {
   color: var(--go);
 }
-.m-status-nogo,
-.m-status-noroute {
+.m-status-nogo {
   border-top-color: var(--nogo);
   background: rgb(229 80 79 / 0.06);
 }
-.m-status-nogo strong,
-.m-status-noroute strong {
+.m-status-nogo strong {
   color: var(--nogo);
+}
+/* No route: nothing was judged. Its own colour and a broken rule, apart from a broken limit. */
+.m-status-noroute {
+  border-top: 2px dashed var(--noroute);
+  background: rgb(159 176 195 / 0.05);
+}
+.m-status-noroute strong {
+  color: var(--noroute);
+}
+.m-why {
+  margin-top: 4px;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
 }
 
 /* one short line per failed constraint */
@@ -413,9 +425,11 @@
 .cmp td.v-go {
   color: var(--go);
 }
-.cmp td.v-nogo,
-.cmp td.v-noroute {
+.cmp td.v-nogo {
   color: var(--nogo);
+}
+.cmp td.v-noroute {
+  color: var(--noroute);
 }
 .cmp-note {
   margin-top: 10px;

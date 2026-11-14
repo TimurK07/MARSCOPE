@@ -5,6 +5,7 @@ import { BASE_LAYERS, CRATER_VIEW, TILE_LAYERS, type TileLayerDef } from '../lib
 import { contourImage, elevationImage, hazardImage, hiddenSteepImage, type HazardMode } from '../lib/overlays'
 import { cellAt, elevationAt, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
 import type { RoverStop, RoverTrack } from '../lib/nasa'
+import type { LegRole, RouteNote } from '../lib/routeDisplay'
 import type { RouteLeg } from '../lib/router'
 import { LOCAL_EXIT_ZOOM } from '../lib/viewTransition'
 
@@ -42,6 +43,10 @@ interface Props {
   track: RoverTrack | null
   points: LatLon[]
   legs: RouteLeg[]
+  /** Outbound or return, for each leg. Colour only: the geometry is the leg's own. */
+  legRoles: LegRole[]
+  /** Places the planner established and the map should mark. */
+  notes: RouteNote[]
   selectedSol: number | null
   cursor: LatLon | null
   inspect: LatLon | null
@@ -345,10 +350,24 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
     const group = planGroup.current
     if (!group) return
     group.clearLayers()
-    for (const leg of props.legs) {
+    // Outbound legs first, the return last and dashed, so both read where they share ground.
+    props.legs.forEach((leg, n) => {
+      const role = props.legRoles[n] ?? 'outbound'
       const pts = leg.samples.map((s) => [s.lat, s.lon] as [number, number])
       L.polyline(pts, { className: 'route-casing', interactive: false }).addTo(group)
-      L.polyline(pts, { className: 'route-line', interactive: false }).addTo(group)
+      L.polyline(pts, { className: `route-line route-${role}`, interactive: false }).addTo(group)
+    })
+    // Marks at places the planner established: never a stretch of route.
+    for (const note of props.notes) {
+      L.marker([note.at.lat, note.at.lon], {
+        icon: icon(`<div class="mk mk-note mk-note-${note.kind}" role="img" aria-label="${note.label.replace(/"/g, '&quot;')}"><i></i></div>`, 48),
+        interactive: true,
+        keyboard: false,
+        bubblingMouseEvents: true,
+        zIndexOffset: 250,
+      })
+        .bindTooltip(note.label, { direction: 'top', offset: [0, -16], className: 'note-tip' })
+        .addTo(group)
     }
     props.points.forEach((p, i) => {
       const html =
@@ -370,7 +389,7 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
         })
         .addTo(group)
     })
-  }, [props.points, props.legs])
+  }, [props.points, props.legs, props.legRoles, props.notes])
 
   // Inspected point.
   useEffect(() => {

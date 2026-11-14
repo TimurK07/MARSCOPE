@@ -23,9 +23,12 @@
   --go: #5bbf9b;
   --nogo: #e5504f;
   --warn: #e0b246;
+  /* No route: nothing to judge. A cool grey-blue, apart from the red of a broken limit. */
+  --noroute: #9fb0c3;
 
   /* Map */
   --route: #62d4e8;
+  --route-return: #ee8c60;
   --rover: #ecd27a;
 
   /* Type */

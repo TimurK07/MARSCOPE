@@ -26,6 +26,7 @@ import {
 } from './globe'
 import { HIRISE } from './layers'
 import { MARS_FEATURES } from './marsFeatures'
+import { ROUTE_COLOR_HEX, type LegRole, type MissionTone, type RouteNote } from './routeDisplay'
 import type { LatLon } from './terrain'
 import { GALE_IMAGERY, floorZoomAt } from './viewTransition'
 
@@ -37,17 +38,25 @@ export interface GlobeViewState extends LatLon {
   altitudeKm: number
 }
 
+/** Dash lengths on the unit sphere. The frame's are about 70 m and 100 m; the return route's about 30 m and 15 m. */
+const FRAME_DASH = { size: 0.00002, gap: 0.00003 }
+const RETURN_DASH = { size: 0.000009, gap: 0.0000045 }
+
 export interface GlobeData {
   /** Study area with terrain data: [south, west, north, east]. */
   site: BBox
   points: LatLon[]
   /** Route legs as sampled geographic paths. */
   legs: LatLon[][]
+  /** Outbound or return, for each leg: the same colours as on the 2D map. */
+  legRoles: LegRole[]
+  /** Places the planner established and the 2D map marks too. */
+  notes: RouteNote[]
   rover: LatLon | null
   inspect: LatLon | null
   /** Whether the 2D map currently shows its HiRISE layer; the globe matches it up close. */
   hirise: boolean
-  mission: { title: string; detail: string; tone: 'idle' | 'go' | 'nogo' }
+  mission: { title: string; detail: string; tone: MissionTone }
 }
 
 export interface GlobeCallbacks {
@@ -507,14 +516,16 @@ export class GlobeEngine {
     // Route: every leg follows the surface. Samples are metres apart, so the
     // densify step only matters if a leg ever has a long gap.
     let routeRad = 0
-    for (const leg of data.legs) {
+    data.legs.forEach((leg, n) => {
+      const role = data.legRoles[n] ?? 'outbound'
       const path = densifyPath(leg, 0.002)
       for (let i = 1; i < leg.length; i++) routeRad += angularDistance(leg[i - 1], leg[i])
       this.routeGroup.add(this.makeLine(path, 0x05181c, 7, false, 0.7))
-      const top = this.makeLine(path, 0x62d4e8, 3, false, 1)
-      top.renderOrder = 6
+      // The return is dashed, as on the 2D map, so it reads where it shares ground with the way out.
+      const top = this.makeLine(path, ROUTE_COLOR_HEX[role], 3, role === 'return', 1, RETURN_DASH)
+      top.renderOrder = role === 'return' ? 7 : 6
       this.routeGroup.add(top)
-    }
+    })
     this.routeRad = routeRad
 
     const close = (zoom: number) => this.spanPx(this.siteSpanRad, zoom) >= 70
@@ -528,6 +539,13 @@ export class GlobeEngine {
     const anchor = data.points[0] ?? centre
     this.addOverlay(this.dataOverlays, mission, anchor, (z) => !close(z))
 
+    for (const note of data.notes) {
+      const el = document.createElement('div')
+      el.className = 'gl-pin gl-note'
+      el.title = note.label
+      el.innerHTML = `<div class="mk mk-note mk-note-${note.kind}"><i></i></div>`
+      this.addOverlay(this.dataOverlays, el, note.at, close)
+    }
     data.points.forEach((p, i) => {
       const el = document.createElement('div')
       el.className = 'gl-pin'
@@ -864,12 +882,12 @@ export class GlobeEngine {
 
   // ---------- lines and overlays ----------
 
-  private makeLine(path: LatLon[], color: number, width: number, dashed: boolean, opacity = 1): Line2 {
+  private makeLine(path: LatLon[], color: number, width: number, dashed: boolean, opacity = 1, dash = FRAME_DASH): Line2 {
     const pos: number[] = []
     for (const p of path) pos.push(...latLonToUnit(p))
     const geo = new LineGeometry()
     geo.setPositions(pos)
-    const mat = new LineMaterial({ color, linewidth: width, transparent: true, opacity, depthTest: false, dashed, dashSize: 0.00002, gapSize: 0.00003 })
+    const mat = new LineMaterial({ color, linewidth: width, transparent: true, opacity, depthTest: false, dashed, dashSize: dash.size, gapSize: dash.gap })
     mat.resolution.set(this.w, this.h)
     const line = new Line2(geo, mat)
     if (dashed) line.computeLineDistances()

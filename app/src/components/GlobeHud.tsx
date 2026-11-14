@@ -3,6 +3,7 @@ import { fetchMolaElevation } from '../lib/elevation'
 import { fetchGeologicUnit, type GeologicUnit } from '../lib/geology'
 import { inBBox, type BBox } from '../lib/globe'
 import type { GlobeViewState } from '../lib/globeEngine'
+import type { MissionTone } from '../lib/routeDisplay'
 import type { LatLon } from '../lib/terrain'
 import { canOpenWorkspaceAt } from '../lib/viewTransition'
 import { fmtLat } from '../hooks/usePlan'
@@ -13,7 +14,7 @@ interface Props {
   hover: LatLon | null
   inspect: LatLon | null
   site: BBox
-  mission: { title: string; detail: string; tone: 'idle' | 'go' | 'nogo'; hasPlan: boolean }
+  mission: { title: string; detail: string; tone: MissionTone; hasPlan: boolean }
   compact: boolean
   /** Imagery is still arriving. */
   busy: boolean

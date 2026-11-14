@@ -7,6 +7,7 @@ import MapView, { type HoverInfo, type LayerState, type MapHandle } from './comp
 import MissionPanel, { MissionHead, VERDICT_TITLE, verdictOf } from './components/MissionPanel'
 import MobileSheet, { SHEET_PEEK_H, sheetHeights, type SheetSnap, type SheetTab } from './components/MobileSheet'
 import Onboarding from './components/Onboarding'
+import RouteOverlay from './components/RouteOverlay'
 import ToolRail, { RAIL_PANES, type RailPane } from './components/ToolRail'
 import { Icon, Segmented } from './components/ui'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -17,6 +18,7 @@ import { TILE_LAYERS, THEMIS_DAY } from './lib/layers'
 import { PLANNING_PACE, surfaceDistanceM } from './lib/model'
 import { fetchLatestWeather, fetchRoverTrack, type RoverStop, type RoverTrack, type WeatherSol } from './lib/nasa'
 import type { HazardMode } from './lib/overlays'
+import { missionTone, routeDisplay } from './lib/routeDisplay'
 import type { RouteSample } from './lib/router'
 import { loadTerrain, type LatLon, type Terrain } from './lib/terrain'
 import { LOCAL_ENTER_ZOOM, canOpenWorkspaceAt, canStartTransition, focusOffset, shouldAutoEnter, type ViewPhase } from './lib/viewTransition'
@@ -58,7 +60,7 @@ function missionSummary(plan: ReturnType<typeof usePlan>) {
   const targets = Math.max(plan.points.length - 1, 0)
   return {
     hasPlan: plan.points.length > 0,
-    tone: verdict === 'go' ? ('go' as const) : verdict === 'nogo' || verdict === 'noroute' ? ('nogo' as const) : ('idle' as const),
+    tone: missionTone(verdict),
     title: plan.points.length > 0 ? `EVA plan · ${VERDICT_TITLE[verdict]}` : 'Gale crater study area',
     detail: route
       ? `${fmtKm(route.distance)} · EVA ${fmtDur(plan.planEvaSeconds)} at ≤ ${PLANNING_PACE.max_kmh} km/h · ${targets} target${targets === 1 ? '' : 's'}`
@@ -97,6 +99,8 @@ export default function App() {
 
   // Workspace chrome
   const isMobile = useMediaQuery('(max-width: 760px)')
+  // Between phone and desktop the status bar is too short for the whole map key, so the map carries the route key.
+  const narrowKey = useMediaQuery('(max-width: 1180px)')
   const [briefing, setBriefing] = useState(() => !wasBriefed())
   const [toast, setToast] = useState<Toast | null>(null)
   const [railPane, setRailPane] = useState<RailPane | null>(null)
@@ -356,6 +360,14 @@ export default function App() {
   // What the globe draws: the same mission state the 2D workspace edits.
   const planPoints = plan.points
   const planRoute = plan.plan
+  const planChecks = plan.checks
+  const planRoundTrip = plan.roundTrip
+  const planVerdict = verdictOf(plan)
+  // How the plan is drawn, for the 2D map, the globe and the legends alike.
+  const display = useMemo(
+    () => routeDisplay({ points: planPoints, roundTrip: planRoundTrip, plan: planRoute, checks: planChecks, verdict: planVerdict }),
+    [planPoints, planRoundTrip, planRoute, planChecks, planVerdict],
+  )
   const summary = missionSummary(plan)
   const summaryKey = `${summary.title}|${summary.detail}|${summary.tone}`
   const hirisOn = tiles.hirise.on
@@ -366,14 +378,17 @@ export default function App() {
     return {
       site: [b.south, b.west, b.north, b.east],
       points: planPoints,
-      legs: planRoute && !planRoute.error ? planRoute.legs.map((l) => l.samples) : [],
+      // Legs that were found are drawn, with the same roles and marks as on the 2D map.
+      legs: planRoute ? planRoute.legs.map((l) => l.samples) : [],
+      legRoles: display.roles,
+      notes: display.notes,
       rover: last ? { lat: last.lat, lon: last.lon } : null,
       inspect,
       hirise: hirisOn,
       mission: summary,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terrain, track, planPoints, planRoute, inspect, summaryKey, hirisOn])
+  }, [terrain, track, planPoints, planRoute, display, inspect, summaryKey, hirisOn])
 
   if (loadError) return <div className="boot">Could not load terrain data: {loadError}</div>
   if (!terrain) return <div className="boot">Loading Mount Sharp terrain…</div>
@@ -530,6 +545,8 @@ export default function App() {
             track={track}
             points={plan.points}
             legs={plan.plan?.legs ?? []}
+            legRoles={display.roles}
+            notes={display.notes}
             selectedSol={stop?.sol ?? null}
             cursor={cursor}
             inspect={inspect}
@@ -566,6 +583,7 @@ export default function App() {
           )}
 
           {view === 'local' && toastEl}
+          {view === 'local' && <RouteOverlay display={display} compact={isMobile || narrowKey} />}
         </div>
 
         {!isMobile && (
@@ -610,10 +628,18 @@ export default function App() {
               </span>
             )}
             <ul className="status-key" aria-label="Map key">
-              <li>
-                <i className="key-route" />
-                Planned route
-              </li>
+              {display.legend.length === 0 && (
+                <li>
+                  <i className="key-route" />
+                  Planned route
+                </li>
+              )}
+              {display.legend.map((item) => (
+                <li key={item.id}>
+                  <i className={`key-${item.id}`} />
+                  {item.label}
+                </li>
+              ))}
               {showTrack && (
                 <li>
                   <i className="key-track" />

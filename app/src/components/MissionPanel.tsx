@@ -176,13 +176,19 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
           </p>
         )}
         {verdict === 'go' && <p>Route is within all MARSCOPE planning limits. Not a safety clearance.</p>}
-        {verdict === 'noroute' && <p>{plan?.error}</p>}
+        {verdict === 'noroute' && (
+          <>
+            <p>{plan?.error}</p>
+            <p className="m-why">Legs that were found are drawn. Nothing else is assessed until every checkpoint can be reached.</p>
+          </>
+        )}
         {verdict === 'unverified' && (
           <p>
             The return to the habitat could not be verified: the calculation limit was reached. This is not a confirmed
             violation, and it is not a GO.
           </p>
         )}
+        {verdict === 'nogo' && <p className="m-why">Outside MARSCOPE planning limits. The route itself stays within the slope limit:</p>}
         {verdict === 'nogo' && (
           <ul className="m-fail">
             {failed.map((c) => (
