@@ -42,6 +42,10 @@ export function DockContent(p: DockContentProps) {
   if (p.tab === 'profile')
     return route ? (
       <Profile samples={route.samples} stops={route.legStarts} roundTrip={p.plan.roundTrip} onCursor={p.onCursor} />
+    ) : p.plan.pending ? (
+      <p className="dock-empty" role="status" aria-busy="true">
+        Calculating the route. Its terrain profile appears here when it is ready.
+      </p>
     ) : (
       <p className="dock-empty">Plan a route to see its terrain profile. The profile is coloured by slope class and linked to the map.</p>
     )

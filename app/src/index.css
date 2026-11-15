@@ -11,7 +11,8 @@
   /* Text */
   --text: #ebe8e2;
   --text-2: #a9acb0;
-  --text-3: #757981;
+  /* At least 4.5:1 on every surface it is used on, the selected card and table column included. */
+  --text-3: #8e9299;
 
   /* Accent: muted Mars orange */
   --accent: #d4683c;
@@ -22,6 +23,8 @@
   /* Status */
   --go: #5bbf9b;
   --nogo: #e5504f;
+  /* The same red for small text: 4.5:1 or more where --nogo itself falls short. */
+  --nogo-text: #ee6c6b;
   --warn: #e0b246;
   /* No route: nothing to judge. A cool grey-blue, apart from the red of a broken limit. */
   --noroute: #9fb0c3;
@@ -65,6 +68,10 @@ body,
 #root {
   height: 100%;
   margin: 0;
+}
+/* The application fills the window and scrolls only inside its panels: the document itself never scrolls. */
+html {
+  overflow: hidden;
 }
 
 body {

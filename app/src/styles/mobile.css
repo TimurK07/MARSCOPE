@@ -10,18 +10,20 @@
   inset: 0 0 78px 0;
 }
 .is-mobile .topbar {
-  gap: 10px;
-  padding: 0 8px 0 12px;
+  /* room for 40 px controls */
+  height: 48px;
+  gap: 8px;
+  padding: 0 4px 0 12px;
 }
 .is-mobile .topbar-site,
 .is-mobile .zoom {
   display: none;
 }
 .is-mobile .topbar-tools {
-  gap: 4px;
+  gap: 2px;
 }
 .is-mobile .seg button {
-  min-height: 30px;
+  min-height: 40px;
 }
 .is-mobile .toast {
   bottom: 10px;
@@ -262,8 +264,23 @@
 
 /* comfortable touch targets */
 .is-mobile .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
+}
+.is-mobile .btn-sm {
+  min-height: 40px;
+  padding: 0 10px;
+}
+/* A checkpoint pin keeps its size; the area that takes the touch around it is 42 px. */
+.is-mobile .mk-base,
+.is-mobile .mk-target {
+  position: relative;
+}
+.is-mobile .mk-base::after,
+.is-mobile .mk-target::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
 }
 .is-mobile .switch {
   width: 40px;
@@ -290,7 +307,7 @@
   padding: 0 8px;
 }
 .is-mobile .topbar-tools .icon-btn {
-  width: 32px;
+  width: 40px;
 }
 .is-mobile .gl-mission small {
   display: none;
@@ -298,4 +315,35 @@
 
 .sheet-verdict.v-unverified {
   color: var(--warn);
+}
+
+/* Touch screens that keep the desktop layout (a tablet held upright): the same 40 px targets. */
+@media (pointer: coarse) {
+  :root {
+    --topbar-h: 48px;
+    --dock-tabs-h: 40px;
+  }
+  .seg button,
+  .btn-sm {
+    min-height: 40px;
+  }
+  .zoom button,
+  .rail-btn,
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .sec-head {
+    min-height: 44px;
+  }
+  .mk-base,
+  .mk-target {
+    position: relative;
+  }
+  .mk-base::after,
+  .mk-target::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
 import { PLANNING_PACE } from '../lib/model'
 import { ROUTE_MODES } from '../lib/objectives'
-import { VERDICT_TITLE, verdictOf } from './MissionPanel'
+import { statusTitle, verdictOf } from '../lib/missionStatus'
 
 export type SheetSnap = 'peek' | 'half' | 'full'
 export type SheetTab = 'mission' | 'layers' | 'point' | 'profile' | 'surface'
@@ -20,7 +20,7 @@ const TABS: { id: SheetTab; label: string }[] = [
 /** Height in px of each snap position for the current viewport. */
 export function sheetHeights(): Record<SheetSnap, number> {
   const vh = window.innerHeight
-  return { peek: SHEET_PEEK_H, half: Math.round(vh * 0.52), full: vh - 52 }
+  return { peek: SHEET_PEEK_H, half: Math.round(vh * 0.52), full: vh - 60 }
 }
 
 interface Props {
@@ -101,9 +101,9 @@ export default function MobileSheet({ plan, snap, onSnap, tab, onTab, marked, ch
         }}
       >
         <i className="sheet-grip" />
-        <div className="sheet-summary">
+        <div className="sheet-summary" aria-busy={plan.pending}>
           <div className="sheet-status">
-            <strong className={`sheet-verdict v-${verdict}`}>{VERDICT_TITLE[verdict]}</strong>
+            <strong className={`sheet-verdict v-${verdict}`}>{statusTitle(plan)}</strong>
             <em className="sheet-mode">{ROUTE_MODES.find((m) => m.id === plan.mode)!.label}</em>
           </div>
           {ready ? (

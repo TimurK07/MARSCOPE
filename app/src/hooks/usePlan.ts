@@ -90,7 +90,16 @@ export function usePlan(terrain: Terrain | null) {
 
   // A result is shown only for the checkpoints it was computed for.
   // ...and for the return limit it was checked against: a verdict for another limit is never shown.
-  const fresh = result && result.input.points === points && result.input.returnDistanceM === returnDistanceM ? result : null
+  // ...and for the same round trip and carried mass: both shape the routes, so a result for other
+  // values is an old one and is not shown as current while the new one is being calculated.
+  const fresh =
+    result &&
+    result.input.points === points &&
+    result.input.returnDistanceM === returnDistanceM &&
+    result.input.roundTrip === roundTrip &&
+    result.input.massKg === massKg
+      ? result
+      : null
   const plan: Plan | null = fresh?.plans[mode] ?? null
 
   const comparison = useMemo(() => {

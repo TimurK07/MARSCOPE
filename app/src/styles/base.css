@@ -271,5 +271,5 @@
 .chip-nogo,
 .chip-noroute {
   background: rgb(229 80 79 / 0.18);
-  color: var(--nogo);
+  color: var(--nogo-text);
 }

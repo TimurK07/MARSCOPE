@@ -146,7 +146,7 @@
 .route-alert b {
   font: 700 var(--fs-xs) var(--mono);
   letter-spacing: 0.06em;
-  color: var(--nogo);
+  color: var(--nogo-text);
 }
 .route-alert.tone-unverified {
   border-left-color: var(--warn);

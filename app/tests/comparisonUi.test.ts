@@ -127,7 +127,7 @@ describe('the comparison table', () => {
 
   it('has a colour for every verdict and touch-sized controls on mobile', () => {
     for (const v of ['go', 'nogo', 'unverified', 'noroute']) expect(mission).toContain(`.cmp td.v-${v}`)
-    expect(mission).toMatch(/\.is-mobile \.cmp thead button,\s*\.is-mobile \.cmp-fold summary \{\s*min-height: 40px;/)
+    expect(mission).toMatch(/\.is-mobile \.cmp thead button,\s*\.is-mobile \.cmp-fold summary,[^{]*\{\s*min-height: 40px;/)
   })
 
   it('lets long labels and values wrap instead of scrolling sideways', () => {
@@ -141,7 +141,8 @@ describe('the mobile sheet', () => {
   const summary = sheet.slice(sheet.indexOf('className="sheet-summary"'), sheet.indexOf('className="sheet-tabs"'))
 
   it('shows verdict, distance, planning EVA duration and the selected priority when collapsed', () => {
-    expect(summary).toContain('VERDICT_TITLE[verdict]')
+    // The verdict word, or CALCULATING while there is no result yet.
+    expect(summary).toContain('statusTitle(plan)')
     expect(summary).toContain('fmtKm(plan.plan!.distance)')
     expect(summary).toContain('fmtDur(plan.planEvaSeconds)')
     expect(summary).toContain('sheet-mode')

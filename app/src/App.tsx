@@ -4,7 +4,8 @@ import DataPane from './components/DataPanel'
 import GlobeHud from './components/GlobeHud'
 import type { GlobeHandle } from './components/GlobeView'
 import MapView, { type HoverInfo, type LayerState, type MapHandle } from './components/MapView'
-import MissionPanel, { MissionHead, VERDICT_TITLE, verdictOf } from './components/MissionPanel'
+import MissionPanel, { MissionHead } from './components/MissionPanel'
+import { statusTitle, verdictOf } from './lib/missionStatus'
 import MobileSheet, { SHEET_PEEK_H, sheetHeights, type SheetSnap, type SheetTab } from './components/MobileSheet'
 import Onboarding from './components/Onboarding'
 import RouteOverlay from './components/RouteOverlay'
@@ -61,11 +62,13 @@ function missionSummary(plan: ReturnType<typeof usePlan>) {
   return {
     hasPlan: plan.points.length > 0,
     tone: missionTone(verdict),
-    title: plan.points.length > 0 ? `EVA plan · ${VERDICT_TITLE[verdict]}` : 'Gale crater study area',
+    title: plan.points.length > 0 ? `EVA plan · ${statusTitle(plan)}` : 'Gale crater study area',
     detail: route
       ? `${fmtKm(route.distance)} · EVA ${fmtDur(plan.planEvaSeconds)} at ≤ ${PLANNING_PACE.max_kmh} km/h · ${targets} target${targets === 1 ? '' : 's'}`
-      : plan.points.length > 0
-        ? 'Habitat set. Add a science target in the workspace.'
+      : plan.pending
+        ? 'Calculating routes…'
+        : plan.points.length > 0
+          ? 'Habitat set. Add a science target in the workspace.'
         : 'Terrain data and EVA routing are available here.',
   }
 }

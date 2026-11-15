@@ -298,7 +298,7 @@
   color: var(--go);
 }
 .hud-mission.tone-nogo strong {
-  color: var(--nogo);
+  color: var(--nogo-text);
 }
 .hud-mission.tone-unverified strong {
   color: var(--warn);

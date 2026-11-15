@@ -280,7 +280,7 @@ describe('the comparison cards', () => {
   })
 
   it('do not change with the selection, apart from the mark', () => {
-    const strip = (sel: RouteMode) => modeCards(EXAMPLE, sel).map(({ selected: _, ...rest }) => rest)
+    const strip = (sel: RouteMode) => modeCards(EXAMPLE, sel).map((c) => ({ ...c, selected: false }))
     expect(strip('energy')).toEqual(strip('fastest'))
     expect(strip('cautious')).toEqual(strip('fastest'))
   })

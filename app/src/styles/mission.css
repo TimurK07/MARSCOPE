@@ -25,6 +25,10 @@
   font-size: var(--fs-sm);
   line-height: 1.4;
 }
+/* being calculated: no verdict yet, and not an idle panel either */
+.m-status-calculating strong {
+  color: var(--text-2);
+}
 .m-status-go {
   border-top-color: var(--go);
 }
@@ -67,13 +71,12 @@
   font-size: var(--fs-sm);
 }
 .m-fail span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
 }
 .m-fail code {
   flex: none;
-  color: var(--nogo);
+  white-space: nowrap;
+  color: var(--nogo-text);
   font-weight: 500;
 }
 .m-fail code i {
@@ -275,6 +278,14 @@
   gap: 10px;
   font-size: var(--fs-sm);
 }
+.limit-row span {
+  min-width: 0;
+}
+/* a figure and its unit, and the limit beside it, stay on one line; the label wraps instead */
+.limit-row code {
+  flex: none;
+  white-space: nowrap;
+}
 .limit-row code b {
   font-weight: 500;
 }
@@ -296,7 +307,7 @@
   color: var(--text-2);
 }
 .limits .bad .limit-row code b {
-  color: var(--nogo);
+  color: var(--nogo-text);
 }
 .limits .bad .limit-bar i {
   background: var(--nogo);
@@ -332,7 +343,7 @@
   color: var(--go);
 }
 .feasible.is-bad span {
-  color: var(--nogo);
+  color: var(--nogo-text);
 }
 .limit-margin {
   margin-top: 3px;
@@ -341,7 +352,7 @@
   font-size: var(--fs-xs);
 }
 .limits .bad .limit-margin {
-  color: var(--nogo);
+  color: var(--nogo-text);
 }
 
 /* route priority */
@@ -415,7 +426,7 @@
   color: var(--go);
 }
 .mc-verdict.v-nogo {
-  color: var(--nogo);
+  color: var(--nogo-text);
 }
 .mc-verdict.v-unverified {
   color: var(--warn);
@@ -456,6 +467,7 @@
 /* short desktop windows: a smaller status block and tighter figures, so the plan below keeps its room */
 @media (max-height: 700px) {
   .ws:not(.is-mobile) .m-status {
+    position: relative;
     min-height: 0;
     padding: 7px var(--pad) 8px;
   }
@@ -482,15 +494,26 @@
   }
 }
 
+/* Text for screen readers only. It is taken out of the flow, so the box it sits in must be
+   positioned (see .cmp below): otherwise it is placed against the document, falls outside the
+   scrolling panel and makes the page itself scrollable. */
 .sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
   overflow: hidden;
   clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* comparison of the three priorities */
+/* the positioning context of the table's screen-reader text, so it scrolls with the table */
+.cmp th {
+  position: relative;
+}
 .cmp table {
   width: 100%;
   border-collapse: collapse;
@@ -543,6 +566,12 @@
   margin-top: 6px;
   color: var(--text-2);
   font-size: var(--fs-sm);
+  line-height: 1.45;
+}
+.limits-note {
+  margin-top: 12px;
+  color: var(--text-2);
+  font-size: var(--fs-xs);
   line-height: 1.45;
 }
 .cmp-fold {
@@ -604,7 +633,7 @@
   color: var(--go);
 }
 .cmp td.v-nogo {
-  color: var(--nogo);
+  color: var(--nogo-text);
 }
 .cmp td.v-noroute {
   color: var(--noroute);
@@ -612,12 +641,17 @@
 
 /* touch: larger targets for the priority controls */
 .is-mobile .cmp thead button,
-.is-mobile .cmp-fold summary {
+.is-mobile .cmp-fold summary,
+.is-mobile .return-limit .btn,
+.is-mobile .return-limit .num input {
   min-height: 40px;
 }
 @media (pointer: coarse) {
   .cmp thead button,
-  .cmp-fold summary {
+  .cmp-fold summary,
+  .mode-card,
+  .return-limit .btn,
+  .return-limit .num input {
     min-height: 40px;
   }
 }
@@ -680,9 +714,9 @@
   margin-top: 6px;
 }
 .is-mobile .return-limit .num input {
-  height: 36px;
+  height: 40px;
   width: 76px;
 }
 .is-mobile .return-limit .btn {
-  min-height: 36px;
+  min-height: 40px;
 }

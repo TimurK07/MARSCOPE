@@ -8,6 +8,7 @@ import { EVA, MAX_SLOPE_DEG, PLANNING_PACE, RADIATION, RETURN_DISTANCE_AT_PACE_M
 import { fmtCoord, fmtDur, fmtKm, type PlanState } from '../hooks/usePlan'
 import { Datum, Icon, Section } from './ui'
 import { fmtDose, fmtSlope } from '../lib/format'
+import { isCalculating, statusTitle, verdictOf } from '../lib/missionStatus'
 
 interface Props {
   plan: PlanState
@@ -175,21 +176,6 @@ const fmtSaved = (v: number) => `${v >= 0 ? '−' : '+'}${Math.abs(v).toFixed(v 
 
 export type { Verdict } from '../lib/mission'
 
-export function verdictOf(s: PlanState): Verdict {
-  // GO only when the planner itself says so; anything unsettled is never shown as GO.
-  if (!s.plan) return 'standby'
-  if (s.plan.error) return 'noroute'
-  return s.verdict === 'go' && s.go ? 'go' : s.verdict === 'unverified' ? 'unverified' : 'nogo'
-}
-
-export const VERDICT_TITLE: Record<Verdict, string> = {
-  standby: 'STANDBY',
-  go: 'GO',
-  nogo: 'NO-GO',
-  unverified: 'UNVERIFIED',
-  noroute: 'NO ROUTE',
-}
-
 /** Mission status and primary metrics. Stays fixed above the scrolling plan. */
 export function MissionHead({ plan: s }: { plan: PlanState }) {
   const { plan, checks, points } = s
@@ -199,13 +185,13 @@ export function MissionHead({ plan: s }: { plan: PlanState }) {
 
   return (
     <div className="m-head">
-      <div className={`m-status m-status-${verdict}`} role="status" aria-live="polite">
+      <div className={`m-status m-status-${verdict} ${isCalculating(s) ? 'm-status-calculating' : ''}`} role="status" aria-live="polite" aria-busy={s.pending}>
         <span className="label">Mission status</span>
-        <strong>{VERDICT_TITLE[verdict]}</strong>
+        <strong>{statusTitle(s)}</strong>
         {verdict === 'standby' && (
           <p>
             {s.pending
-              ? 'Calculating routes…'
+              ? 'Calculating routes for these checkpoints. No result is shown until it is ready.'
               : points.length === 0
                 ? 'Select a habitat site on the map.'
                 : 'Habitat set. Add a science target.'}
@@ -521,7 +507,13 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
             )
           })}
         </ul>
-        <p className="footnote">
+        <p className="limits-note">
+          All three limits are MARSCOPE planning assumptions, not an official safety standard for EVAs on Mars. Passing
+          them is a planning result, not a guarantee of a safe return.
+        </p>
+        <details className="cmp-fold">
+          <summary>About these limits</summary>
+          <p className="footnote">
           All three limits are MARSCOPE planning assumptions that can be changed in the model. None is an official
           safety standard for EVAs on Mars. They are informed by NASA EVA-EXP-0075, a summary of the Artemis lunar EVA
           concept: a suit that supports EVAs of up to 8 hours, walking excursions within a 2 km radius at about 2 km/h,
@@ -533,7 +525,8 @@ export default function MissionPanel({ plan: s, ...p }: Props) {
           {PLANNING_PACE.max_kmh} km/h; the two figures above describe that path from the worst point. Passing this check
           is a planning result under these assumptions, not a guarantee of a safe return on Mars. Ways back follow the terrain grid towards the habitat, so a climb home counts as
           slower than the walk out, and they are not straightened, which errs on the careful side.
-        </p>
+          </p>
+        </details>
       </Section>
 
       <Section title="Route telemetry" defaultOpen={false}>
