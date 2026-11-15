@@ -119,6 +119,50 @@
   white-space: normal;
 }
 
+/* Fit route: frames the whole route in the visible part of the map */
+.map-fit {
+  position: absolute;
+  z-index: 450;
+  right: 12px;
+  top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  background: rgb(14 17 21 / 0.92);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+.map-fit:hover {
+  color: var(--text);
+  border-color: var(--text-3);
+}
+/* On a phone the label is in the button's name; the icon alone leaves the map free. */
+.is-mobile .map-fit {
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.is-mobile .map-fit span {
+  display: none;
+}
+.is-mobile .route-overlay {
+  /* room for the Fit route button beside it */
+  max-width: calc(100% - 24px - 48px);
+}
+@media (pointer: coarse) {
+  .map-fit {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
 /* Over the map: why a plan does not pass, and on small screens the route key */
 .route-overlay {
   position: absolute;

@@ -3,7 +3,7 @@ import { fetchMolaElevation } from '../lib/elevation'
 import { fetchGeologicUnit, type GeologicUnit } from '../lib/geology'
 import { inBBox, type BBox } from '../lib/globe'
 import type { GlobeViewState } from '../lib/globeEngine'
-import type { MissionTone } from '../lib/routeDisplay'
+import type { MissionSummary } from '../lib/missionStatus'
 import type { LatLon } from '../lib/terrain'
 import { canOpenWorkspaceAt } from '../lib/viewTransition'
 import { fmtLat } from '../hooks/usePlan'
@@ -14,7 +14,8 @@ interface Props {
   hover: LatLon | null
   inspect: LatLon | null
   site: BBox
-  mission: { title: string; detail: string; tone: MissionTone; hasPlan: boolean }
+  /** The same mission as in the 2D workspace: verdict, route priority, reason and key. */
+  mission: MissionSummary
   compact: boolean
   /** Imagery is still arriving. */
   busy: boolean
@@ -122,10 +123,31 @@ export default function GlobeHud(p: Props) {
       </div>
 
       {!p.compact && (
-        <div className={`hud-card hud-mission tone-${p.mission.tone}`}>
+        <div className={`hud-card hud-mission tone-${p.mission.tone}`} role="status" aria-live="polite" aria-busy={p.mission.busy}>
           <span className="label">{p.mission.hasPlan ? 'EVA mission' : 'Mission workspace'}</span>
           <strong>{p.mission.title}</strong>
+          {p.mission.mode && (
+            <p className="hud-mode">
+              <i>Route priority</i> {p.mission.mode}
+            </p>
+          )}
+          {p.mission.reason && (
+            <p className="hud-reason">
+              {p.mission.reason}
+              {p.mission.moreReasons > 0 && ` (and ${p.mission.moreReasons} more)`}
+            </p>
+          )}
           <p>{p.mission.detail}</p>
+          {p.mission.legend.length > 0 && (
+            <ul className="route-legend hud-legend" aria-label="Route key">
+              {p.mission.legend.map((item) => (
+                <li key={item.id}>
+                  <i className={`key-${item.id}`} />
+                  {item.label}
+                </li>
+              ))}
+            </ul>
+          )}
           <button type="button" className="btn btn-primary btn-block" onClick={() => p.onOpenWorkspace()}>
             {p.mission.hasPlan ? 'Open mission workspace' : 'Enter Gale crater workspace'}
             <Icon name="enter" size={14} />

@@ -5,7 +5,8 @@ import GlobeHud from './components/GlobeHud'
 import type { GlobeHandle } from './components/GlobeView'
 import MapView, { type HoverInfo, type LayerState, type MapHandle } from './components/MapView'
 import MissionPanel, { MissionHead } from './components/MissionPanel'
-import { statusTitle, verdictOf } from './lib/missionStatus'
+import { missionSummary, verdictOf } from './lib/missionStatus'
+import { fitInsets, fitRequestStale, routeBounds, sheetCover, shouldAutoFit, type FitRequest } from './lib/routeFit'
 import MobileSheet, { SHEET_PEEK_H, sheetHeights, type SheetSnap, type SheetTab } from './components/MobileSheet'
 import Onboarding from './components/Onboarding'
 import RouteOverlay from './components/RouteOverlay'
@@ -16,10 +17,10 @@ import { fmtDur, fmtKm, fmtLat, fmtLon, usePlan } from './hooks/usePlan'
 import type { BBox } from './lib/globe'
 import type { GlobeData, GlobeViewState } from './lib/globeEngine'
 import { TILE_LAYERS, THEMIS_DAY } from './lib/layers'
-import { PLANNING_PACE, surfaceDistanceM } from './lib/model'
+import { surfaceDistanceM } from './lib/model'
 import { fetchLatestWeather, fetchRoverTrack, type RoverStop, type RoverTrack, type WeatherSol } from './lib/nasa'
 import type { HazardMode } from './lib/overlays'
-import { missionTone, routeDisplay } from './lib/routeDisplay'
+import { routeDisplay } from './lib/routeDisplay'
 import type { RouteSample } from './lib/router'
 import { loadTerrain, type LatLon, type Terrain } from './lib/terrain'
 import { LOCAL_ENTER_ZOOM, canOpenWorkspaceAt, canStartTransition, focusOffset, shouldAutoEnter, type ViewPhase } from './lib/viewTransition'
@@ -37,6 +38,12 @@ import './styles/globe.css'
 const GlobeView = lazy(() => import('./components/GlobeView'))
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Globe zoom of "Focus on the mission". The globe hands over to the 2D map at LOCAL_ENTER_ZOOM
+ * (12.5) only when the user zooms into its floor; a flight to 12.1 stops short of that.
+ */
+const MISSION_FOCUS_ZOOM = 12.1
 /** Duration of the globe cross-fade; matches .globe-wrap in globe.css. */
 const FADE_MS = 540
 
@@ -54,24 +61,6 @@ function wasBriefed(): boolean {
   }
 }
 
-/** One-line description of the mission for the globe: marker label and summary card. */
-function missionSummary(plan: ReturnType<typeof usePlan>) {
-  const verdict = verdictOf(plan)
-  const route = plan.plan && !plan.plan.error ? plan.plan : null
-  const targets = Math.max(plan.points.length - 1, 0)
-  return {
-    hasPlan: plan.points.length > 0,
-    tone: missionTone(verdict),
-    title: plan.points.length > 0 ? `EVA plan · ${statusTitle(plan)}` : 'Gale crater study area',
-    detail: route
-      ? `${fmtKm(route.distance)} · EVA ${fmtDur(plan.planEvaSeconds)} at ≤ ${PLANNING_PACE.max_kmh} km/h · ${targets} target${targets === 1 ? '' : 's'}`
-      : plan.pending
-        ? 'Calculating routes…'
-        : plan.points.length > 0
-          ? 'Habitat set. Add a science target in the workspace.'
-        : 'Terrain data and EVA routing are available here.',
-  }
-}
 
 interface Toast {
   id: number
@@ -162,6 +151,52 @@ export default function App() {
   }, [isMobile])
 
   const { setPoints, undo, canUndo } = plan
+
+  /** Set when an example mission is loaded; carried out once, when its route is ready. */
+  const fitRequest = useRef<FitRequest | null>(null)
+  /**
+   * Frames the checkpoints and every leg found, the return included, in the part of the map
+   * that is actually visible. Called by the Fit route control and once after an example loads.
+   */
+  const fitRoute = () => {
+    const legs = plan.plan?.legs.map((l) => l.samples) ?? []
+    const overlay = stageEl.current?.querySelector<HTMLElement>('.route-overlay')
+    const flyout = stageEl.current?.querySelector<HTMLElement>('.flyout')
+    return (
+      map.current?.fitRoute(
+        routeBounds(plan.points, legs),
+        fitInsets({
+          overlayHeight: overlay?.offsetHeight ?? 0,
+          leftPane: flyout?.offsetWidth ?? 0,
+          sheetCover: isMobile ? sheetCover(sheetSnap, sheetHeights()) : 0,
+        }),
+      ) ?? false
+    )
+  }
+  const fitRouteRef = useRef(fitRoute)
+  fitRouteRef.current = fitRoute
+  const planForFit = plan.plan
+  const pointsForFit = plan.points
+  // The one automatic fit. It depends on the route only to learn that it has arrived: without a
+  // pending request (and only loading an example makes one) a new route never moves the camera,
+  // so switching the route priority or changing a limit leaves the view where the user put it.
+  useEffect(() => {
+    if (fitRequestStale(fitRequest.current, pointsForFit)) fitRequest.current = null
+    const ready = shouldAutoFit({
+      request: fitRequest.current,
+      points: pointsForFit,
+      routeReady: !!planForFit && !planForFit.error,
+      mapShown: view === 'local' && !arriving,
+    })
+    if (!ready) return
+    // After the layout has settled: loading an example also opens the dock, which resizes the map.
+    // The request is dropped only when the fit is made, so a further update in between cannot lose it.
+    const timer = setTimeout(() => {
+      fitRequest.current = null
+      fitRouteRef.current()
+    }, 120)
+    return () => clearTimeout(timer)
+  }, [planForFit, pointsForFit, view, arriving])
 
   // Keyboard: undo and escape.
   useEffect(() => {
@@ -310,15 +345,18 @@ export default function App() {
       inside.reduce((best, s) =>
         Math.abs(surfaceDistanceM(now, s) - want) < Math.abs(surfaceDistanceM(now, best) - want) ? s : best,
       )
-    setPoints([now, pick(350), pick(700)].map((s) => ({ lat: s.lat, lon: s.lon })))
+    const example = [now, pick(350), pick(700)].map((s) => ({ lat: s.lat, lon: s.lon }))
+    setPoints(example)
+    // Frame the route once it has been calculated. Nothing else ever asks for this.
+    fitRequest.current = { points: example }
     plan.setRoundTrip(true)
     setInspect(null)
     dismissBriefing()
     setDockTab('profile')
     setDockOpen(true)
     setSheetTab('mission')
-    if (phase.current === 'global') enterLocal({ then: 'site' })
-    else map.current?.fitSite()
+    // The map is framed on the route when it arrives, so it is not sent to the whole study area first.
+    if (phase.current === 'global') enterLocal({ then: 'stay' })
   }
 
   const setHabitat = (p: LatLon) => {
@@ -372,8 +410,8 @@ export default function App() {
     () => routeDisplay({ points: planPoints, roundTrip: planRoundTrip, plan: planRoute, checks: planChecks, verdict: planVerdict, returnDistanceM: planReturnM }),
     [planPoints, planRoundTrip, planRoute, planChecks, planVerdict, planReturnM],
   )
-  const summary = missionSummary(plan)
-  const summaryKey = `${summary.title}|${summary.detail}|${summary.tone}`
+  const summary = missionSummary(plan, display)
+  const summaryKey = `${summary.title}|${summary.detail}|${summary.tone}|${summary.mode}`
   const hirisOn = tiles.hirise.on
   const globeData = useMemo<GlobeData | null>(() => {
     if (!terrain) return null
@@ -403,7 +441,7 @@ export default function App() {
     TILE_LAYERS.filter((d) => tiles[d.id].on).length + [hazard, elevation, contours, hiddenSteep].filter((l) => l.on).length
   const route = plan.plan && !plan.plan.error ? plan.plan : null
   const failed = plan.checks?.filter((c) => !c.ok) ?? []
-  const mission = missionSummary(plan)
+  const mission = summary
 
   const dataProps = {
     terrain,
@@ -588,6 +626,12 @@ export default function App() {
 
           {view === 'local' && toastEl}
           {view === 'local' && <RouteOverlay display={display} compact={isMobile || narrowKey} />}
+          {view === 'local' && plan.points.length > 0 && (
+            <button type="button" className="map-fit" onClick={fitRoute} aria-label="Fit route: show the whole route on the map" title="Show the whole route">
+              <Icon name="expand" size={15} />
+              <span>Fit route</span>
+            </button>
+          )}
         </div>
 
         {!isMobile && (
@@ -781,9 +825,11 @@ export default function App() {
                 busy={globeBusy}
               onOverview={() => globe.current?.flyToOverview()}
               onFocus={() => {
-                const c = plan.points[0] ?? siteCenter()
-                // Close enough to read the route, short of the handover to 2D.
-                globe.current?.flyTo({ ...c, zoom: plan.points.length > 0 ? 11.2 : 8.2 })
+                // The middle of the route, not the habitat alone, so the whole route is in view.
+                const b = routeBounds(plan.points, plan.plan?.legs.map((l) => l.samples) ?? [])
+                const c = b ? { lat: (b.south + b.north) / 2, lon: (b.west + b.east) / 2 } : siteCenter()
+                // Close enough to tell the way out from the way back, short of the handover to 2D.
+                globe.current?.flyTo({ ...c, zoom: plan.points.length > 0 ? MISSION_FOCUS_ZOOM : 8.2 })
               }}
               onOpenWorkspace={(at) => {
                 if (at) {

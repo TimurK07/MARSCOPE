@@ -6,6 +6,7 @@ import { contourImage, elevationImage, hazardImage, hiddenSteepImage, type Hazar
 import { cellAt, elevationAt, slopeAt, type LatLon, type Terrain } from '../lib/terrain'
 import type { RoverStop, RoverTrack } from '../lib/nasa'
 import type { LegRole, RouteNote } from '../lib/routeDisplay'
+import { fitView, type Bounds, type Insets } from '../lib/routeFit'
 import type { RouteLeg } from '../lib/router'
 import { LOCAL_EXIT_ZOOM } from '../lib/viewTransition'
 
@@ -29,6 +30,12 @@ export interface MapHandle {
   /** Moves to a view at once, without animation, and stops following the study area. */
   jumpTo: (center: LatLon, zoom: number) => void
   reveal: (p: LatLon, bottomInset?: number) => void
+  /**
+   * Frames the given bounds inside the free part of the map (see lib/routeFit) and stops
+   * following the study area. Returns false, and moves nothing, when there is nothing to
+   * frame or no room to frame it in.
+   */
+  fitRoute: (bounds: Bounds | null, insets: Insets) => boolean
 }
 
 interface Props {
@@ -145,6 +152,21 @@ const MapView = forwardRef<MapHandle, Props>(function MapView(props, ref) {
         L.latLngBounds([CRATER_VIEW[0], CRATER_VIEW[1]], [CRATER_VIEW[2], CRATER_VIEW[3]]),
         { duration: 0.6 },
       )
+    },
+    fitRoute: (bounds, insets) => {
+      const m = mapRef.current
+      if (!m) return false
+      // Leaflet remembers the container's size. Measure it now: the dock or a pane may have
+      // just opened, and a fit worked out for the old size would cut the route off.
+      m.invalidateSize({ animate: false })
+      const size = m.getSize()
+      const v = fitView(bounds, { width: size.x, height: size.y }, insets, { minZoom: MIN_ZOOM })
+      if (!v) return false
+      autoFit.current = false
+      // No flight for people who ask for less motion: the view is simply set.
+      const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      m.flyTo([v.center.lat, v.center.lon], v.zoom, still ? { animate: false } : { duration: 0.6 })
+      return true
     },
     /** Pan just enough to bring a point into the visible part of the map. */
     reveal: (p: LatLon, bottomInset = 0) => {

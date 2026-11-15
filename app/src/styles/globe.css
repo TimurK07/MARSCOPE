@@ -312,6 +312,39 @@
   font-size: var(--fs-sm);
   line-height: 1.45;
 }
+/* which route priority the summary is for, and why it is not a GO */
+.hud-mission .hud-mode,
+.hud-mission .hud-reason {
+  margin: 3px 0 0;
+}
+.hud-mission .hud-mode {
+  color: var(--text);
+}
+.hud-mission .hud-mode i {
+  color: var(--text-3);
+  font-style: normal;
+}
+.hud-mission .hud-reason {
+  padding-left: 8px;
+  border-left: 2px solid var(--line-strong);
+}
+.hud-mission.tone-nogo .hud-reason {
+  border-left-color: var(--nogo);
+}
+.hud-mission.tone-unverified .hud-reason {
+  border-left-color: var(--warn);
+}
+.hud-mission.tone-noroute .hud-reason {
+  border-left-color: var(--noroute);
+}
+/* the same key as on the 2D map, set into the card */
+.hud-legend {
+  margin: -4px 0 12px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
 .hud-selection {
   right: 14px;
   bottom: 40px;

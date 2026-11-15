@@ -79,7 +79,9 @@ describe('a calculation in progress', () => {
     expect(status).toMatch(/statusTitle = \(s: PlanState\) => \(isCalculating\(s\) \? 'CALCULATING' : VERDICT_TITLE\[verdictOf\(s\)\]\)/)
     expect(panel).toContain('<strong>{statusTitle(s)}</strong>')
     expect(sheet).toContain('{statusTitle(plan)}')
-    expect(app).toContain('`EVA plan · ${statusTitle(plan)}`')
+    // The globe's title is built with the same word, in the mission status module the app calls.
+    expect(status).toContain('`EVA plan · ${statusTitle(plan)}`')
+    expect(app).toContain('missionSummary(plan, display)')
     // The old wording is not used for the headline anywhere.
     for (const src of [sheet, app]) expect(src).not.toContain('VERDICT_TITLE[verdict]')
   })

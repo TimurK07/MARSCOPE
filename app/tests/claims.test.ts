@@ -65,8 +65,11 @@ describe('what the interface says instead', () => {
     expect(sheet).toContain('plan.planEvaSeconds')
     expect(sheet).not.toContain('fmtDur(plan.evaSeconds)')
     expect(sheet).toMatch(/EVA ≤ \{PLANNING_PACE\.max_kmh\} km\/h/)
-    expect(app).toContain('plan.planEvaSeconds')
-    expect(app).not.toContain('fmtDur(plan.evaSeconds)')
+    // The globe's summary line is built in the mission status module, from the planning duration.
+    const status = read(join(APP, 'src/lib/missionStatus.ts'))
+    expect(status).toContain('fmtDur(plan.planEvaSeconds)')
+    expect(status).toMatch(/at ≤ \$\{PLANNING_PACE\.max_kmh\} km\/h/)
+    for (const src of [app, status]) expect(src).not.toContain('fmtDur(plan.evaSeconds)')
     expect(panel).toContain('The 8-hour limit is judged on this figure')
     expect(panel).toContain('EVA duration, model')
   })
